@@ -27,30 +27,35 @@ export function CartLineItem({ layout, line, cart }) {
     navigate(lineItemUrl);
   };
 
-  // Calculate pricing - similar logic to CartSummary
-  const totalAmount = parseFloat(cost?.totalAmount?.amount || 0); // Current total after discounts
-  const unitPrice = parseFloat(cost?.amountPerQuantity?.amount || 0); // Current unit price after discounts
+  // Calculate pricing - use API amounts so bulk tier discount shows correctly (e.g. 8.70 → 8.67)
+  const totalAmount = parseFloat(cost?.totalAmount?.amount || 0); // Line total after discounts (from API)
+  const unitPrice = parseFloat(cost?.amountPerQuantity?.amount || 0); // Unit price after discounts (from API)
 
-  // Calculate original price before cart discounts
+  // Original price before any cart-level discount (variant price)
   const originalUnitPrice = parseFloat(merchandise?.price?.amount || 0);
-  const originalLineTotal = originalUnitPrice * quantity; // Original total for this line item
+  const originalLineTotal = originalUnitPrice * quantity;
 
-  // Calculate discount percentage from cart totals (like CartSummary)
+  // When cart has a bulk discount, Shopify may not break it down per line; compute discounted unit so each line shows e.g. $8.67
   const cartSubtotal = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
   const cartTotal = parseFloat(cart?.cost?.totalAmount?.amount || 0);
   const cartSavings = cartSubtotal - cartTotal;
   const discountPercentage = cartSubtotal > 0 ? (cartSavings / cartSubtotal) * 100 : 0;
+  const computedDiscountedUnit =
+    discountPercentage > 0 && originalUnitPrice > 0
+      ? originalUnitPrice * (1 - discountPercentage / 100)
+      : unitPrice;
+  // When there's a cart-level discount, show the computed discounted price per item ($8.67); otherwise use API unit price
+  const displayUnitPrice =
+    discountPercentage > 0 && originalUnitPrice > 0
+      ? Math.round(computedDiscountedUnit * 100) / 100
+      : (unitPrice > 0 ? unitPrice : computedDiscountedUnit);
 
-  // Calculate discounted per-unit price based on the cart discount percentage
-  const discountedUnitPrice = discountPercentage > 0 && originalUnitPrice > 0
-    ? originalUnitPrice * (1 - discountPercentage / 100)
-    : unitPrice;
-
-  // Calculate savings for this line item
-  const lineSavings = originalLineTotal - totalAmount;
-
-  // Show discount if discount percentage is applied and original price is greater than discounted price
-  const hasDiscount = discountPercentage > 0 && originalUnitPrice > discountedUnitPrice;
+  const displayLineTotal =
+    discountPercentage > 0 && originalUnitPrice > 0
+      ? Math.round(displayUnitPrice * quantity * 100) / 100
+      : totalAmount;
+  const lineSavings = originalLineTotal - displayLineTotal;
+  const hasDiscount = originalUnitPrice > displayUnitPrice && displayUnitPrice > 0;
 
   // Get product title and remove everything after the last "-"
   const fullTitle = product.title;
@@ -157,11 +162,13 @@ export function CartLineItem({ layout, line, cart }) {
         <div className="cart-line-controls" onClick={(e) => e.stopPropagation()}>
           <CartLineQuantity line={line} />
           <div className="cart-line-pricing">
-            {hasDiscount && originalUnitPrice > discountedUnitPrice && (
+            {hasDiscount && (
               <span className="cart-line-price-original">${originalUnitPrice.toFixed(2)} ea</span>
             )}
-            <span className="cart-line-price-current">${discountedUnitPrice.toFixed(2)} ea</span>
-            <span className="cart-line-price-total">${totalAmount.toFixed(2)}</span>
+            <span className={`cart-line-price-current${hasDiscount ? ' cart-line-price-discounted' : ''}`}>
+              ${displayUnitPrice.toFixed(2)} ea
+            </span>
+            <span className="cart-line-price-total">${displayLineTotal.toFixed(2)}</span>
           </div>
         </div>
       </div>

@@ -446,10 +446,19 @@ function HeaderCtas({ isLoggedIn, cart }) {
 
 function AccountLink({ isLoggedIn }) {
   return (
-    <NavLink prefetch="intent" to="/account" className="header-account-link" style={activeLinkStyle}>
+    <NavLink
+      prefetch="intent"
+      to={isLoggedIn ? '/account' : '/account/login'}
+      className="header-account-link"
+      style={activeLinkStyle}
+    >
       <div className="header-account-text">
-        <div className="header-account-greeting">{isLoggedIn ? 'Hello, Guest' : 'Hello, sign in'}</div>
-        <div className="header-account-subtext">My Account / Reorder</div>
+        <div className="header-account-greeting">
+          {isLoggedIn ? 'Hello' : 'Hello, sign in'}
+        </div>
+        <div className="header-account-subtext">
+          {isLoggedIn ? 'My Account / Reorder' : 'Account'}
+        </div>
       </div>
     </NavLink>
   );

@@ -27,10 +27,6 @@ export function ProductForm({
   const { open } = useAside();
   const [sizeQuantities, setSizeQuantities] = useState({});
 
-  const sizeOption = productOptions.find(
-    (option) => option.name.toLowerCase() === 'size',
-  );
-
   // Get product options from selected color product if available
   // getProductOptions will extract adjacentVariants from the product automatically
   const colorProductOptions = selectedColorProduct
@@ -40,14 +36,22 @@ export function ProductForm({
     })
     : null;
 
-  // Use size option from selected color product if available, otherwise use original
-  const effectiveSizeOption = colorProductOptions
-    ? colorProductOptions.find((option) => option.name.toLowerCase() === 'size')
-    : sizeOption;
+  const effectiveProductOptions = colorProductOptions || productOptions;
+  const effectiveSizeOption = effectiveProductOptions.find(
+    (option) => option.name.toLowerCase() === 'size',
+  );
+  const effectiveSelectedVariant =
+    selectedColorProduct?.selectedOrFirstAvailableVariant || selectedVariant;
+
+  useEffect(() => {
+    setSizeQuantities({});
+  }, [selectedColorProduct?.id]);
 
   // Check if this is an accessory (single size) or product with multiple sizes
-  const isAccessory = sizeOption && sizeOption.optionValues.length === 1;
-  const hasMultipleSizes = sizeOption && sizeOption.optionValues.length > 1;
+  const isAccessory =
+    effectiveSizeOption && effectiveSizeOption.optionValues.length === 1;
+  const hasMultipleSizes =
+    effectiveSizeOption && effectiveSizeOption.optionValues.length > 1;
 
   // If we have a Size option with multiple values, use the new size selector with S-4XL
   if (hasMultipleSizes) {
@@ -61,17 +65,11 @@ export function ProductForm({
         // Calculate projected cart total
         if (onProjectedTotalChange) {
           let projectedTotal = currentCartTotal;
-          sizeOption.optionValues.forEach((value) => {
+          effectiveSizeOption.optionValues.forEach((value) => {
             const qty = updated[value.name] || 0;
             if (qty > 0) {
               // Find variant price
               let variant = findVariantForSize(value.name);
-              if (!variant && selectedColorProduct && effectiveSizeOption) {
-                const colorSizeValue = effectiveSizeOption.optionValues.find(
-                  (v) => v.name === value.name,
-                );
-                variant = colorSizeValue?.firstSelectableVariant;
-              }
               if (!variant) {
                 variant = value.firstSelectableVariant;
               }
@@ -111,19 +109,13 @@ export function ProductForm({
     };
 
     // Build cart lines using variants from the selected color product
-    const cartLines = sizeOption.optionValues
+    const cartLines = effectiveSizeOption.optionValues
       .filter((value) => {
         const quantity = sizeQuantities[value.name];
         if (!quantity || quantity <= 0) return false;
 
         // Find variant for this size
         let variant = findVariantForSize(value.name);
-        if (!variant) {
-          const colorSizeValue = effectiveSizeOption?.optionValues.find(
-            (v) => v.name === value.name,
-          );
-          variant = colorSizeValue?.firstSelectableVariant;
-        }
         if (!variant) {
           variant = value.firstSelectableVariant;
         }
@@ -134,12 +126,6 @@ export function ProductForm({
       .map((value) => {
         // Find variant for this size using the same logic
         let variant = findVariantForSize(value.name);
-        if (!variant) {
-          const colorSizeValue = effectiveSizeOption?.optionValues.find(
-            (v) => v.name === value.name,
-          );
-          variant = colorSizeValue?.firstSelectableVariant;
-        }
         if (!variant) {
           variant = value.firstSelectableVariant;
         }
@@ -154,7 +140,7 @@ export function ProductForm({
 
     return (
       <div className="product-form">
-        {productOptions
+        {effectiveProductOptions
           .filter((option) => option.name.toLowerCase() !== 'size')
           .map((option) => (
             <ProductOptionGroup
@@ -165,7 +151,7 @@ export function ProductForm({
           ))}
 
         <SizeSelectorWithQuantities
-          sizeOption={sizeOption}
+          sizeOption={effectiveSizeOption}
           effectiveSizeOption={effectiveSizeOption}
           sizeQuantities={sizeQuantities}
           onQuantityChange={handleQuantityChange}
@@ -182,7 +168,7 @@ export function ProductForm({
 
   // If it's an accessory (single size), show "One Size" block
   if (isAccessory) {
-    const variant = selectedColorProduct?.selectedOrFirstAvailableVariant || selectedVariant;
+    const variant = effectiveSelectedVariant;
     const basePrice = variant?.price?.amount ? parseFloat(variant.price.amount) : 0;
 
     // Get quantity for one size
@@ -248,7 +234,7 @@ export function ProductForm({
 
     return (
       <div className="product-form">
-        {productOptions
+        {effectiveProductOptions
           .filter((option) => option.name.toLowerCase() !== 'size')
           .map((option) => (
             <ProductOptionGroup
@@ -309,7 +295,7 @@ export function ProductForm({
   // Standard form for non-size options
   return (
     <div className="product-form">
-      {productOptions.map((option) => (
+      {effectiveProductOptions.map((option) => (
         <ProductOptionGroup
           key={option.name}
           option={option}
@@ -317,21 +303,21 @@ export function ProductForm({
         />
       ))}
       <AddToCartButton
-        disabled={!selectedVariant || !selectedVariant.availableForSale}
+        disabled={!effectiveSelectedVariant || !effectiveSelectedVariant.availableForSale}
         onClick={() => open('cart')}
         lines={
-          selectedVariant
+          effectiveSelectedVariant
             ? [
               {
-                merchandiseId: selectedVariant.id,
+                merchandiseId: effectiveSelectedVariant.id,
                 quantity: 1,
-                selectedVariant,
+                selectedVariant: effectiveSelectedVariant,
               },
             ]
             : []
         }
       >
-        {selectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
+        {effectiveSelectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
       </AddToCartButton>
     </div>
   );

@@ -59,8 +59,11 @@ function CartCheckoutActions({ checkoutUrl, layout }) {
   if (layout === 'aside') {
     return (
       <div className="cart-checkout-actions">
+        <Link to="/cart" className="cart-view-cart-btn">
+          View Cart
+        </Link>
         <a href={checkoutUrl} target="_self" className="cart-continue-checkout-btn">
-          Continue to Checkout →
+          Checkout
         </a>
       </div>
     );

@@ -1,6 +1,7 @@
 import {useLoaderData, data} from 'react-router';
 import {CartForm} from '@shopify/hydrogen';
 import {CartMain} from '~/components/CartMain';
+import {getActiveTier, BULK_TIERS} from '~/components/BulkPricingTiers';
 
 /**
  * @type {Route.MetaFunction}
@@ -92,36 +93,34 @@ export async function action({request, context}) {
     action === CartForm.ACTIONS.LinesRemove;
   
   if (shouldCheckDiscount && cartId && cartResult) {
-    // Use the cart from the result instead of fetching again to avoid stale data
-    fullCart = cartResult;
-    
-    // Bulk discount tiers configuration
-    // IMPORTANT: Create these discount codes in Shopify Admin first!
-    // The discount codes should be named: BULK99, BULK250, BULK500, BULK1000
-    const BULK_TIERS = [
-      { threshold: 1000, code: 'BULK1000' },
-      { threshold: 500, code: 'BULK500' },
-      { threshold: 250, code: 'BULK250' },
-      { threshold: 99, code: 'BULK99' },
-    ];
-    
-    const subtotalAmount = fullCart.cost?.subtotalAmount?.amount
-      ? parseFloat(fullCart.cost.subtotalAmount.amount)
+    // Fetch fresh cart so we have accurate cost (mutation response may omit or delay cost)
+    let cartForDiscount = cartResult;
+    try {
+      const freshCart = await cart.get();
+      if (freshCart) cartForDiscount = freshCart;
+    } catch (_) {}
+
+    const fromCost = cartForDiscount.cost?.subtotalAmount?.amount
+      ? parseFloat(cartForDiscount.cost.subtotalAmount.amount)
       : 0;
-    
-    // Find the highest tier that applies
-    const applicableTier = BULK_TIERS.find(tier => subtotalAmount >= tier.threshold);
-    
-    // Get currently applied bulk discount codes
-    const currentBulkCodes = fullCart.discountCodes
+    const fromLines =
+      cartForDiscount.lines?.nodes?.reduce((sum, line) => {
+        const qty = line.quantity ?? 0;
+        const price = parseFloat(line.merchandise?.price?.amount || 0);
+        return sum + qty * price;
+      }, 0) ?? 0;
+    const subtotalAmount = fromCost > 0 ? fromCost : fromLines;
+
+    if (process.env.NODE_ENV === 'development' && subtotalAmount > 0) {
+      console.warn('[Bulk discount] subtotal:', subtotalAmount, 'fromCost:', fromCost, 'fromLines:', fromLines);
+    }
+
+    const applicableTier = getActiveTier(subtotalAmount);
+    const currentBulkCodes = cartForDiscount.discountCodes
       ?.filter(code => BULK_TIERS.some(tier => tier.code === code.code) && code.applicable)
       .map(code => code.code) || [];
-    
-    // Determine which discount code should be applied
     const targetCode = applicableTier ? applicableTier.code : null;
-    
-    // Remove all bulk discount codes first
-    const otherDiscountCodes = fullCart.discountCodes
+    const otherDiscountCodes = cartForDiscount.discountCodes
       ?.filter(code => !BULK_TIERS.some(tier => tier.code === code.code))
       .map(code => code.code) || [];
     
@@ -141,13 +140,19 @@ export async function action({request, context}) {
           // Fetch fresh cart data before updating to avoid conflicts
           const freshCart = await cart.get();
           if (!freshCart) break;
-          
-          // Recalculate with fresh data
-          const freshSubtotal = freshCart.cost?.subtotalAmount?.amount
+
+          const freshFromCost = freshCart.cost?.subtotalAmount?.amount
             ? parseFloat(freshCart.cost.subtotalAmount.amount)
             : 0;
-          
-          const freshApplicableTier = BULK_TIERS.find(tier => freshSubtotal >= tier.threshold);
+          const freshFromLines =
+            freshCart.lines?.nodes?.reduce((sum, line) => {
+              const qty = line.quantity ?? 0;
+              const price = parseFloat(line.merchandise?.price?.amount || 0);
+              return sum + qty * price;
+            }, 0) ?? 0;
+          const freshSubtotal = freshFromCost > 0 ? freshFromCost : freshFromLines;
+
+          const freshApplicableTier = getActiveTier(freshSubtotal);
           const freshTargetCode = freshApplicableTier ? freshApplicableTier.code : null;
           
           const freshCurrentBulkCodes = freshCart.discountCodes
@@ -167,11 +172,17 @@ export async function action({request, context}) {
             const discountCodesToApply = freshTargetCode 
               ? [...freshOtherDiscountCodes, freshTargetCode]
               : freshOtherDiscountCodes;
-            
+
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[Bulk discount] applying codes:', discountCodesToApply);
+            }
+
             const discountResult = await cart.updateDiscountCodes(discountCodesToApply);
             if (discountResult?.cart) {
               fullCart = discountResult.cart;
               success = true;
+            } else if (process.env.NODE_ENV === 'development' && discountResult?.errors?.length) {
+              console.warn('[Bulk discount] updateDiscountCodes errors:', discountResult.errors);
             }
           } else {
             // No update needed, use fresh cart
@@ -195,6 +206,8 @@ export async function action({request, context}) {
           break;
         }
       }
+    } else {
+      fullCart = cartForDiscount;
     }
   }
 

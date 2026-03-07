@@ -1,6 +1,6 @@
-import {Await, Link} from 'react-router';
-import {Suspense, useId} from 'react';
-import {Aside} from '~/components/Aside';
+import {Await, Link, useFetcher} from 'react-router';
+import {Suspense, useEffect, useId} from 'react';
+import {Aside, useAside} from '~/components/Aside';
 import {Footer} from '~/components/Footer';
 import {Header, HeaderMenu} from '~/components/Header';
 import {CartMain} from '~/components/CartMain';
@@ -45,15 +45,29 @@ export function PageLayout({
 }
 
 /**
+ * Refetches cart when drawer opens so the drawer always shows latest data (including applied discount).
  * @param {{cart: PageLayoutProps['cart']}}
  */
 function CartAside({cart}) {
+  const {type} = useAside();
+  const fetcher = useFetcher({key: 'cart-drawer'});
+
+  useEffect(() => {
+    if (type === 'cart') {
+      fetcher.load('/cart');
+    }
+  }, [type]);
+
   return (
     <Aside type="cart" heading={null}>
       <Suspense fallback={<p>Loading cart ...</p>}>
         <Await resolve={cart}>
-          {(cart) => {
-            return <CartMain cart={cart} layout="aside" />;
+          {(resolvedCart) => {
+            const cartToShow =
+              fetcher.state === 'idle' && fetcher.data != null
+                ? fetcher.data
+                : resolvedCart;
+            return <CartMain cart={cartToShow} layout="aside" />;
           }}
         </Await>
       </Suspense>
