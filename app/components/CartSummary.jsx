@@ -25,7 +25,7 @@ export function CartSummary({ cart, layout }) {
             </span>
           </div>
         </div>
-        <CartCheckoutActions checkoutUrl={cart?.checkoutUrl} />
+        <CartCheckoutActions checkoutUrl={cart?.checkoutUrl} layout={layout} />
       </div>
     );
   }
@@ -45,13 +45,13 @@ export function CartSummary({ cart, layout }) {
       </dl>
       <CartDiscounts discountCodes={cart?.discountCodes} cart={cart} layout={layout} />
       <CartGiftCard giftCardCodes={cart?.appliedGiftCards} />
-      <CartCheckoutActions checkoutUrl={cart?.checkoutUrl} />
+      <CartCheckoutActions checkoutUrl={cart?.checkoutUrl} layout={layout} />
     </div>
   );
 }
 
 /**
- * @param {{checkoutUrl?: string}}
+ * @param {{checkoutUrl?: string, layout?: string}}
  */
 function CartCheckoutActions({ checkoutUrl, layout }) {
   if (!checkoutUrl) return null;
