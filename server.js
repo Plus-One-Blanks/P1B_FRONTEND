@@ -28,7 +28,7 @@ export default {
       const handleRequest = createRequestHandler({
         // eslint-disable-next-line import/no-unresolved
         build: await import('virtual:react-router/server-build'),
-        mode: process.env.NODE_ENV,
+        mode: process.env.NODE_ENV || 'development',
         getLoadContext: () => hydrogenContext,
       });
 
@@ -57,6 +57,9 @@ export default {
       return response;
     } catch (error) {
       console.error(error);
+      if (error instanceof Error && error.stack) {
+        console.error(error.stack);
+      }
       return new Response('An unexpected error occurred', {status: 500});
     }
   },

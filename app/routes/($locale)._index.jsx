@@ -28,14 +28,24 @@ export async function loader(args) {
  * @param {Route.LoaderArgs}
  */
 async function loadCriticalData({ context }) {
-  // Query multiple collections for different sections
-  const tshirtsHandle = 'short-sleeve-t-shirts';
+  // Query multiple collections for different sections (must match nav /collection URLs)
+  const tshirtsHandle = 't-shirts';
   const sweatshirtsHandle = 'sweatshirts';
   const longSleeveTshirtsHandle = 'long-sleeve-t-shirts';
-  const youthTshirtsHandle = 'youth-t-shirts';
-  const tankTopsHandle = 'tank-tops';
+  const polosHandle = 'polos';
+  const hatsHandle = 'hats';
+  const jacketsHandle = 'jackets';
+  const safetyHandle = 'safety';
 
-  const [tshirtsResult, sweatshirtsResult, longSleeveTshirtsResult, youthTshirtsResult, tankTopsResult] = await Promise.all([
+  const [
+    tshirtsResult,
+    sweatshirtsResult,
+    longSleeveTshirtsResult,
+    polosResult,
+    hatsResult,
+    jacketsResult,
+    safetyResult,
+  ] = await Promise.all([
     context.storefront.query(FEATURED_COLLECTION_QUERY, {
       variables: { handle: tshirtsHandle },
     }),
@@ -46,10 +56,16 @@ async function loadCriticalData({ context }) {
       variables: { handle: longSleeveTshirtsHandle },
     }),
     context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: youthTshirtsHandle },
+      variables: { handle: polosHandle },
     }),
     context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: tankTopsHandle },
+      variables: { handle: hatsHandle },
+    }),
+    context.storefront.query(FEATURED_COLLECTION_QUERY, {
+      variables: { handle: jacketsHandle },
+    }),
+    context.storefront.query(FEATURED_COLLECTION_QUERY, {
+      variables: { handle: safetyHandle },
     }),
   ]);
 
@@ -72,8 +88,10 @@ async function loadCriticalData({ context }) {
     tshirtsCollection: tshirtsResult?.collection || null,
     sweatshirtsCollection: sweatshirtsResult?.collection || null,
     longSleeveTshirtsCollection: longSleeveTshirtsResult?.collection || null,
-    youthTshirtsCollection: youthTshirtsResult?.collection || null,
-    tankTopsCollection: tankTopsResult?.collection || null,
+    polosCollection: polosResult?.collection || null,
+    hatsCollection: hatsResult?.collection || null,
+    jacketsCollection: jacketsResult?.collection || null,
+    safetyCollection: safetyResult?.collection || null,
   };
 }
 
@@ -111,17 +129,17 @@ export default function Homepage() {
           collection={data.longSleeveTshirtsCollection}
         />
       )}
-      {data.youthTshirtsCollection && (
-        <CollectionSection
-          title="Youth T-Shirts"
-          collection={data.youthTshirtsCollection}
-        />
+      {data.polosCollection && (
+        <CollectionSection title="Polos" collection={data.polosCollection} />
       )}
-      {data.tankTopsCollection && (
-        <CollectionSection
-          title="Tank Tops"
-          collection={data.tankTopsCollection}
-        />
+      {data.hatsCollection && (
+        <CollectionSection title="Hats" collection={data.hatsCollection} />
+      )}
+      {data.jacketsCollection && (
+        <CollectionSection title="Jackets" collection={data.jacketsCollection} />
+      )}
+      {data.safetyCollection && (
+        <CollectionSection title="Safety" collection={data.safetyCollection} />
       )}
     </div>
   );
@@ -184,7 +202,7 @@ export function CollectionBanner({ title, description }) {
           </p>
         )}
         <div className="homepage-banner-categories">
-          <a href="/collections/short-sleeve-t-shirts" className="homepage-banner-category">
+          <a href="/collections/t-shirts" className="homepage-banner-category">
             <Shirt className="homepage-banner-category-icon" size={24} />
             <span className="homepage-banner-category-label">T-Shirts</span>
           </a>
@@ -276,7 +294,7 @@ const FEATURED_COLLECTION_QUERY = `#graphql
     title
     description
     handle
-    products(first: 20, sortKey: COLLECTION_DEFAULT) {
+    products(first: 20, sortKey: MANUAL) {
       nodes {
         ...ProductItem
       }

@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { Await, NavLink, useAsyncValue } from 'react-router';
 import { useAnalytics, useOptimisticCart } from '@shopify/hydrogen';
 import { useAside } from '~/components/Aside';
@@ -115,26 +115,14 @@ export function HeaderMenu({
   const className = `header-menu-${viewport}`;
   const { close } = useAside();
 
-  // Navigation items with dropdown support
+  // Early release: flat links only. Re-enable mega-menu block below when catalog grows.
   const navigationItems = [
-    {
-      title: 'T-Shirts',
-      url: '/collections/short-sleeve-t-shirts',
-      hasDropdown: true,
-      dropdownContent: 'tshirts'
-    },
-    {
-      title: 'Sweatshirts',
-      url: '/collections/sweatshirts',
-      hasDropdown: true,
-      dropdownContent: 'sweatshirts'
-    },
-    {
-      title: 'More',
-      url: '#',
-      hasDropdown: true,
-      dropdownContent: 'more'
-    },
+    {title: 'T-Shirts', url: '/collections/t-shirts'},
+    {title: 'Sweatshirts', url: '/collections/sweatshirts'},
+    {title: 'Polos', url: '/collections/polos'},
+    {title: 'Hats', url: '/collections/hats'},
+    {title: 'Jackets', url: '/collections/jackets'},
+    {title: 'Safety', url: '/collections/safety'},
   ];
 
   return (
@@ -151,281 +139,289 @@ export function HeaderMenu({
         </NavLink>
       )}
       {navigationItems.map((item, index) => (
-        <HeaderMenuItem
+        <NavLink
           key={index}
-          item={item}
-          close={close}
-          activeLinkStyle={activeLinkStyle}
-        />
+          className="header-menu-item"
+          end
+          onClick={close}
+          prefetch="intent"
+          style={activeLinkStyle}
+          to={item.url}
+        >
+          {item.title}
+        </NavLink>
       ))}
     </nav>
   );
 }
 
-/**
- * Header menu item with dropdown support
- */
-function HeaderMenuItem({ item, close, activeLinkStyle }) {
-  const [isHovered, setIsHovered] = useState(false);
+// Mega-menu archive (commented out for early release). To restore: uncomment the block below,
+// switch HeaderMenu to map HeaderMenuItem + dropdown navigationItems, add useState to the react import.
 
-  return (
-    <div
-      className="header-menu-item-wrapper"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <NavLink
-        className="header-menu-item"
-        end
-        onClick={close}
-        prefetch="intent"
-        to={item.url}
-      >
-        {item.title}
-      </NavLink>
-      {item.hasDropdown && (
-        <>
-          <svg
-            className="header-menu-chevron"
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3.5 5.25l3.5 3.5 3.5-3.5" />
-          </svg>
-          {isHovered && item.dropdownContent === 'tshirts' && (
-            <>
-              <div
-                className="header-menu-dropdown-bridge"
-                onMouseEnter={() => setIsHovered(true)}
-              />
-              <TShirtsDropdown
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                onLinkClick={() => setIsHovered(false)}
-              />
-            </>
-          )}
-          {isHovered && item.dropdownContent === 'sweatshirts' && (
-            <>
-              <div
-                className="header-menu-dropdown-bridge"
-                onMouseEnter={() => setIsHovered(true)}
-              />
-              <SweatshirtsDropdown
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                onLinkClick={() => setIsHovered(false)}
-              />
-            </>
-          )}
-          {isHovered && item.dropdownContent === 'more' && (
-            <>
-              <div
-                className="header-menu-dropdown-bridge"
-                onMouseEnter={() => setIsHovered(true)}
-              />
-              <MoreDropdown
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                onLinkClick={() => setIsHovered(false)}
-              />
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * T-Shirts dropdown menu component
- */
-function TShirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-  return (
-    <div
-      className="header-menu-dropdown"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <div className="header-menu-dropdown-content">
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
-          <ul className="header-menu-dropdown-list">
-            <li>
-              <NavLink to="/collections/short-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>
-                Short Sleeve
-                <span className="header-menu-dropdown-badge">Popular</span>
-              </NavLink>
-            </li>
-            <li><NavLink to="/collections/long-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Long Sleeve</NavLink></li>
-            <li><NavLink to="/collections/3-4-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>3/4 Sleeve</NavLink></li>
-            <li><NavLink to="/collections/raglan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Raglan</NavLink></li>
-            <li><NavLink to="/collections/tank-tops" className="header-menu-dropdown-link" onClick={onLinkClick}>Tank Tops</NavLink></li>
-            <li><NavLink to="/collections/performance-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
-            <li><NavLink to="/collections/safety-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY FIT</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/unisex-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex Adult</NavLink></li>
-            <li><NavLink to="/collections/mens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
-            <li><NavLink to="/collections/womens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
-            <li><NavLink to="/collections/youth-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
-            <li><NavLink to="/collections/toddler-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Toddler</NavLink></li>
-            <li><NavLink to="/collections/infant-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Infant</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/cotton-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
-            <li><NavLink to="/collections/polyester-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
-            <li><NavLink to="/collections/cotton-poly-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
-            <li><NavLink to="/collections/tri-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/gildan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
-            <li><NavLink to="/collections/bella-canvas-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
-            <li><NavLink to="/collections/next-level-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
-            <li><NavLink to="/collections/comfort-colors-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
-            <li><NavLink to="/collections/champion-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
-            <li><NavLink to="/collections/jerzees-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
-            <li><NavLink to="/collections/hanes-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
-            <li><NavLink to="/collections/team-365-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Team 365</NavLink></li>
-            <li><NavLink to="/collections/all-brands-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Sweatshirts dropdown menu component
- */
-function SweatshirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-  return (
-    <div
-      className="header-menu-dropdown"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <div className="header-menu-dropdown-content">
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
-          <ul className="header-menu-dropdown-list">
-            <li>
-              <NavLink to="/collections/hoodies" className="header-menu-dropdown-link" onClick={onLinkClick}>
-                Hoodies
-                <span className="header-menu-dropdown-badge">Popular</span>
-              </NavLink>
-            </li>
-            <li><NavLink to="/collections/crewneck-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Crewneck</NavLink></li>
-            <li><NavLink to="/collections/zip-up-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Zip Up</NavLink></li>
-            <li><NavLink to="/collections/performance-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
-            <li><NavLink to="/collections/safety-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY FIT</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/unisex-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex</NavLink></li>
-            <li><NavLink to="/collections/mens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
-            <li><NavLink to="/collections/womens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
-            <li><NavLink to="/collections/youth-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/cotton-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
-            <li><NavLink to="/collections/polyester-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
-            <li><NavLink to="/collections/cotton-poly-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
-            <li><NavLink to="/collections/tri-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
-          </ul>
-        </div>
-        <div className="header-menu-dropdown-column">
-          <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
-          <ul className="header-menu-dropdown-list">
-            <li><NavLink to="/collections/gildan-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
-            <li><NavLink to="/collections/hanes-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
-            <li><NavLink to="/collections/jerzees-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
-            <li><NavLink to="/collections/bella-canvas-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
-            <li><NavLink to="/collections/champion-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
-            <li><NavLink to="/collections/next-level-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
-            <li><NavLink to="/collections/threadfast-apparel-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Threadfast Apparel</NavLink></li>
-            <li><NavLink to="/collections/j-america-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>J America</NavLink></li>
-            <li><NavLink to="/collections/comfort-colors-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
-            <li><NavLink to="/collections/all-brands-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * More dropdown menu component
- */
-function MoreDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-  return (
-    <div
-      className="header-menu-dropdown header-menu-dropdown-more"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <div className="header-menu-dropdown-content header-menu-dropdown-single-column">
-        <ul className="header-menu-dropdown-list">
-          <li>
-            <NavLink to="/collections/accessories" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Accessories
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-drinkware-hard-goods" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Drinkware & Hard Goods
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-toddler-infant-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Toddler & Infant Apparel
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-kids-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Kids Apparel
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-pants" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Pants
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-shorts" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Shorts
-            </NavLink>
-          </li>
-          <li>
-            <NavLink to="/collections/blank-womens-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-              Blank Women's Apparel
-            </NavLink>
-          </li>
-        </ul>
-      </div>
-    </div>
-  );
-}
+// /**
+//  * Header menu item with dropdown support
+//  */
+// function HeaderMenuItem({ item, close, activeLinkStyle }) {
+//   const [isHovered, setIsHovered] = useState(false);
+// 
+//   return (
+//     <div
+//       className="header-menu-item-wrapper"
+//       onMouseEnter={() => setIsHovered(true)}
+//       onMouseLeave={() => setIsHovered(false)}
+//     >
+//       <NavLink
+//         className="header-menu-item"
+//         end
+//         onClick={close}
+//         prefetch="intent"
+//         to={item.url}
+//       >
+//         {item.title}
+//       </NavLink>
+//       {item.hasDropdown && (
+//         <>
+//           <svg
+//             className="header-menu-chevron"
+//             width="14"
+//             height="14"
+//             viewBox="0 0 14 14"
+//             fill="none"
+//             stroke="currentColor"
+//             strokeWidth="2"
+//             strokeLinecap="round"
+//             strokeLinejoin="round"
+//           >
+//             <path d="M3.5 5.25l3.5 3.5 3.5-3.5" />
+//           </svg>
+//           {isHovered && item.dropdownContent === 'tshirts' && (
+//             <>
+//               <div
+//                 className="header-menu-dropdown-bridge"
+//                 onMouseEnter={() => setIsHovered(true)}
+//               />
+//               <TShirtsDropdown
+//                 onMouseEnter={() => setIsHovered(true)}
+//                 onMouseLeave={() => setIsHovered(false)}
+//                 onLinkClick={() => setIsHovered(false)}
+//               />
+//             </>
+//           )}
+//           {isHovered && item.dropdownContent === 'sweatshirts' && (
+//             <>
+//               <div
+//                 className="header-menu-dropdown-bridge"
+//                 onMouseEnter={() => setIsHovered(true)}
+//               />
+//               <SweatshirtsDropdown
+//                 onMouseEnter={() => setIsHovered(true)}
+//                 onMouseLeave={() => setIsHovered(false)}
+//                 onLinkClick={() => setIsHovered(false)}
+//               />
+//             </>
+//           )}
+//           {isHovered && item.dropdownContent === 'more' && (
+//             <>
+//               <div
+//                 className="header-menu-dropdown-bridge"
+//                 onMouseEnter={() => setIsHovered(true)}
+//               />
+//               <MoreDropdown
+//                 onMouseEnter={() => setIsHovered(true)}
+//                 onMouseLeave={() => setIsHovered(false)}
+//                 onLinkClick={() => setIsHovered(false)}
+//               />
+//             </>
+//           )}
+//         </>
+//       )}
+//     </div>
+//   );
+// }
+// 
+// /**
+//  * T-Shirts dropdown menu component
+//  */
+// function TShirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
+//   return (
+//     <div
+//       className="header-menu-dropdown"
+//       onMouseEnter={onMouseEnter}
+//       onMouseLeave={onMouseLeave}
+//     >
+//       <div className="header-menu-dropdown-content">
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li>
+//               <NavLink to="/collections/short-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//                 Short Sleeve
+//                 <span className="header-menu-dropdown-badge">Popular</span>
+//               </NavLink>
+//             </li>
+//             <li><NavLink to="/collections/long-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Long Sleeve</NavLink></li>
+//             <li><NavLink to="/collections/3-4-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>3/4 Sleeve</NavLink></li>
+//             <li><NavLink to="/collections/raglan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Raglan</NavLink></li>
+//             <li><NavLink to="/collections/tank-tops" className="header-menu-dropdown-link" onClick={onLinkClick}>Tank Tops</NavLink></li>
+//             <li><NavLink to="/collections/performance-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
+//             <li><NavLink to="/collections/safety-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY FIT</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/unisex-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex Adult</NavLink></li>
+//             <li><NavLink to="/collections/mens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
+//             <li><NavLink to="/collections/womens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
+//             <li><NavLink to="/collections/youth-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
+//             <li><NavLink to="/collections/toddler-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Toddler</NavLink></li>
+//             <li><NavLink to="/collections/infant-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Infant</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/cotton-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
+//             <li><NavLink to="/collections/polyester-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
+//             <li><NavLink to="/collections/cotton-poly-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
+//             <li><NavLink to="/collections/tri-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/gildan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
+//             <li><NavLink to="/collections/bella-canvas-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
+//             <li><NavLink to="/collections/next-level-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
+//             <li><NavLink to="/collections/comfort-colors-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
+//             <li><NavLink to="/collections/champion-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
+//             <li><NavLink to="/collections/jerzees-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
+//             <li><NavLink to="/collections/hanes-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
+//             <li><NavLink to="/collections/team-365-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Team 365</NavLink></li>
+//             <li><NavLink to="/collections/all-brands-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
+//           </ul>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+// 
+// /**
+//  * Sweatshirts dropdown menu component
+//  */
+// function SweatshirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
+//   return (
+//     <div
+//       className="header-menu-dropdown"
+//       onMouseEnter={onMouseEnter}
+//       onMouseLeave={onMouseLeave}
+//     >
+//       <div className="header-menu-dropdown-content">
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li>
+//               <NavLink to="/collections/hoodies" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//                 Hoodies
+//                 <span className="header-menu-dropdown-badge">Popular</span>
+//               </NavLink>
+//             </li>
+//             <li><NavLink to="/collections/crewneck-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Crewneck</NavLink></li>
+//             <li><NavLink to="/collections/zip-up-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Zip Up</NavLink></li>
+//             <li><NavLink to="/collections/performance-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
+//             <li><NavLink to="/collections/safety-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY FIT</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/unisex-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex</NavLink></li>
+//             <li><NavLink to="/collections/mens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
+//             <li><NavLink to="/collections/womens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
+//             <li><NavLink to="/collections/youth-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/cotton-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
+//             <li><NavLink to="/collections/polyester-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
+//             <li><NavLink to="/collections/cotton-poly-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
+//             <li><NavLink to="/collections/tri-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
+//           </ul>
+//         </div>
+//         <div className="header-menu-dropdown-column">
+//           <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
+//           <ul className="header-menu-dropdown-list">
+//             <li><NavLink to="/collections/gildan-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
+//             <li><NavLink to="/collections/hanes-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
+//             <li><NavLink to="/collections/jerzees-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
+//             <li><NavLink to="/collections/bella-canvas-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
+//             <li><NavLink to="/collections/champion-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
+//             <li><NavLink to="/collections/next-level-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
+//             <li><NavLink to="/collections/threadfast-apparel-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Threadfast Apparel</NavLink></li>
+//             <li><NavLink to="/collections/j-america-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>J America</NavLink></li>
+//             <li><NavLink to="/collections/comfort-colors-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
+//             <li><NavLink to="/collections/all-brands-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
+//           </ul>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+// 
+// /**
+//  * More dropdown menu component
+//  */
+// function MoreDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
+//   return (
+//     <div
+//       className="header-menu-dropdown header-menu-dropdown-more"
+//       onMouseEnter={onMouseEnter}
+//       onMouseLeave={onMouseLeave}
+//     >
+//       <div className="header-menu-dropdown-content header-menu-dropdown-single-column">
+//         <ul className="header-menu-dropdown-list">
+//           <li>
+//             <NavLink to="/collections/accessories" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Accessories
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-drinkware-hard-goods" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Drinkware & Hard Goods
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-toddler-infant-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Toddler & Infant Apparel
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-kids-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Kids Apparel
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-pants" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Pants
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-shorts" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Shorts
+//             </NavLink>
+//           </li>
+//           <li>
+//             <NavLink to="/collections/blank-womens-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
+//               Blank Women's Apparel
+//             </NavLink>
+//           </li>
+//         </ul>
+//       </div>
+//     </div>
+//   );
+// }
 
 /**
  * @param {Pick<HeaderProps, 'isLoggedIn' | 'cart'>}

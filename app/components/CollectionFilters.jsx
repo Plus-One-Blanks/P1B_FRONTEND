@@ -114,55 +114,55 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
   // Extract unique fabrics from product titles/tags with counts
   const fabrics = useMemo(() => {
     const fabricMap = new Map();
-    
+
     // Define all possible fabric types with their search terms
     const allFabricTypes = [
-      { 
+      {
         name: '100% Cotton',
         searchTerms: ['100% cotton', '100%cotton', 'cotton 100%', 'cotton']
       },
-      { 
+      {
         name: '100% Polyester',
         searchTerms: ['100% polyester', '100%polyester', 'polyester 100%', 'polyester']
       },
-      { 
+      {
         name: 'Cotton/Poly Blend',
         searchTerms: ['cotton/poly', 'cotton poly blend', 'cotton/polyester', 'cotton polyester blend', '50/50', '5050', 'cotton poly', 'cvc', '50/50 blend']
       },
-      { 
+      {
         name: 'Cotton/Spandex',
         searchTerms: ['cotton/spandex', 'cotton spandex', 'cotton spandex blend']
       },
-      { 
+      {
         name: 'Organic',
         searchTerms: ['organic', 'organic cotton']
       },
-      { 
+      {
         name: 'Performance',
         searchTerms: ['performance', 'performance fabric', 'athletic']
       },
-      { 
+      {
         name: 'Polyester Blend',
         searchTerms: ['polyester blend', 'poly blend']
       },
-      { 
+      {
         name: 'Rayon',
         searchTerms: ['rayon']
       },
-      { 
+      {
         name: 'Recycled',
         searchTerms: ['recycled', 'recycled fabric']
       },
-      { 
+      {
         name: 'Spandex',
         searchTerms: ['spandex']
       },
-      { 
+      {
         name: 'Tri-Blend (Poly/Cotton/Rayon)',
         searchTerms: ['tri-blend', 'tri blend', 'poly/cotton/rayon', 'poly cotton rayon', 'triblend']
       }
     ];
-    
+
     // Count products for each fabric type
     products.forEach((product) => {
       const titleLower = (product.title || '').toLowerCase();
@@ -171,21 +171,21 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
       const descriptionLower = (product.description || '').toLowerCase();
       // Combine all searchable text
       const searchText = `${titleLower} ${tagsLower} ${descriptionLower}`;
-      
+
       allFabricTypes.forEach(({ name, searchTerms }) => {
         // Check if any search term is found in the product text
         const matches = searchTerms.some(term => {
           const termLower = term.toLowerCase();
           return searchText.includes(termLower);
         });
-        
+
         if (matches) {
           const currentCount = fabricMap.get(name) || 0;
           fabricMap.set(name, currentCount + 1);
         }
       });
     });
-    
+
     // Always return all fabric types, with count 0 if not found
     return allFabricTypes.map(({ name }) => ({
       name,
@@ -255,14 +255,14 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
         'Spandex': ['spandex'],
         'Tri-Blend (Poly/Cotton/Rayon)': ['tri-blend', 'tri blend', 'poly/cotton/rayon', 'poly cotton rayon']
       };
-      
+
       filtered = filtered.filter((product) => {
         const titleLower = (product.title || '').toLowerCase();
         const tagsArray = product.tags || [];
         const tagsLower = Array.isArray(tagsArray) ? tagsArray.join(' ').toLowerCase() : String(tagsArray).toLowerCase();
         const descriptionLower = (product.description || '').toLowerCase();
         const searchText = `${titleLower} ${tagsLower} ${descriptionLower}`;
-        
+
         return selectedFabrics.some((fabricName) => {
           const searchTerms = fabricSearchMap[fabricName] || [fabricName.toLowerCase()];
           return searchTerms.some(term => searchText.includes(term.toLowerCase()));

@@ -7,6 +7,7 @@ import { useVariantUrl } from '~/lib/variants';
  *   product:
  *     | CollectionItemFragment
  *     | ProductItemFragment
+ *     | ProductItemCollectionFragment
  *     | RecommendedProductFragment;
  *   loading?: 'eager' | 'lazy';
  * }}
@@ -136,5 +137,6 @@ export function ProductItem({ product, loading }) {
 }
 
 /** @typedef {import('storefrontapi.generated').ProductItemFragment} ProductItemFragment */
+/** @typedef {import('storefrontapi.generated').ProductItemCollectionFragment} ProductItemCollectionFragment */
 /** @typedef {import('storefrontapi.generated').CollectionItemFragment} CollectionItemFragment */
 /** @typedef {import('storefrontapi.generated').RecommendedProductFragment} RecommendedProductFragment */

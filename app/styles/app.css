@@ -6,6 +6,16 @@
   --header-height: 64px;
   --color-dark: #000;
   --color-light: #fff;
+  --font-body:
+    'Montserrat', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  /* Sticky header (logo row + nav) — keep in sync with .header visual height */
+  --collection-sidebar-sticky-top: 168px;
+}
+
+html,
+body {
+  font-family: var(--font-body);
 }
 
 img {
@@ -398,7 +408,7 @@ button.reset:hover:not(:has(> *)) {
 .header-menu-desktop {
   display: none;
   align-items: center;
-  gap: 1.5rem;
+  gap: 2.5rem;
 
   @media (min-width: 45em) {
     display: flex;
@@ -574,7 +584,7 @@ button.reset:hover:not(:has(> *)) {
 .header-menu-mobile {
   display: flex;
   flex-direction: column;
-  grid-gap: 1rem;
+  grid-gap: 1.5rem;
 }
 
 /* Mobile Responsive */
@@ -1958,15 +1968,34 @@ button.reset:hover:not(:has(> *)) {
 
 .collection-sidebar {
   position: sticky;
-  /* Clear header (top bar + nav bar); use 120px to match full header height */
-  top: 120px;
-  align-self: start;
-  height: fit-content;
-  max-height: calc(100vh - 120px - 1rem);
+  /* Sit below sticky .header — must match real header height or filters clip under the bar */
+  top: var(--collection-sidebar-sticky-top);
+  /* Stretch with the grid row so sticky isn’t limited to the filter block height */
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(100vh - var(--collection-sidebar-sticky-top) - 1rem);
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 5;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 0.25rem;
+  box-sizing: border-box;
+}
+
+.collection-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.collection-sidebar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.collection-sidebar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media (max-width: 768px) {
@@ -1975,6 +2004,8 @@ button.reset:hover:not(:has(> *)) {
     top: 0;
     max-height: none;
     overflow-y: visible;
+    padding-right: 0;
+    scrollbar-gutter: auto;
   }
 }
 

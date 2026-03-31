@@ -186,11 +186,11 @@ export default function Collection() {
 }
 
 const PRODUCT_ITEM_FRAGMENT = `#graphql
-  fragment MoneyProductItem on MoneyV2 {
+  fragment MoneyProductItemCollection on MoneyV2 {
     amount
     currencyCode
   }
-  fragment ProductItem on Product {
+  fragment ProductItemCollection on Product {
     id
     handle
     title
@@ -206,10 +206,10 @@ const PRODUCT_ITEM_FRAGMENT = `#graphql
     }
     priceRange {
       minVariantPrice {
-        ...MoneyProductItem
+        ...MoneyProductItemCollection
       }
       maxVariantPrice {
-        ...MoneyProductItem
+        ...MoneyProductItemCollection
       }
     }
   }
@@ -239,7 +239,7 @@ const COLLECTION_QUERY = `#graphql
         after: $endCursor
       ) {
         nodes {
-          ...ProductItem
+          ...ProductItemCollection
         }
         pageInfo {
           hasPreviousPage
@@ -253,5 +253,5 @@ const COLLECTION_QUERY = `#graphql
 `;
 
 /** @typedef {import('./+types/collections.$handle').Route} Route */
-/** @typedef {import('storefrontapi.generated').ProductItemFragment} ProductItemFragment */
+/** @typedef {import('storefrontapi.generated').ProductItemCollectionFragment} ProductItemCollectionFragment */
 /** @typedef {import('@shopify/remix-oxygen').SerializeFrom<typeof loader>} LoaderReturnData */
