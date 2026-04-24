@@ -9,6 +9,7 @@ export function PaginatedResourceSection({
   connection,
   children,
   resourcesClassName,
+  wrapperClassName,
 }) {
   return (
     <Pagination connection={connection}>
@@ -18,7 +19,7 @@ export function PaginatedResourceSection({
         );
 
         return (
-          <div>
+          <div className={wrapperClassName}>
             <PreviousLink>
               {isLoading ? 'Loading...' : <span>↑ Load previous</span>}
             </PreviousLink>

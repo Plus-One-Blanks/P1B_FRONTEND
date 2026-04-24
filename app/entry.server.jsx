@@ -1,7 +1,7 @@
-import {ServerRouter} from 'react-router';
-import {isbot} from 'isbot';
-import {renderToReadableStream} from 'react-dom/server';
-import {createContentSecurityPolicy} from '@shopify/hydrogen';
+import { ServerRouter } from 'react-router';
+import { isbot } from 'isbot';
+import { renderToReadableStream } from 'react-dom/server';
+import { createContentSecurityPolicy } from '@shopify/hydrogen';
 
 /**
  * @param {Request} request
@@ -17,11 +17,19 @@ export default async function handleRequest(
   reactRouterContext,
   context,
 ) {
-  const {nonce, header, NonceProvider} = createContentSecurityPolicy({
+  const { nonce, header, NonceProvider } = createContentSecurityPolicy({
     shop: {
       checkoutDomain: context.env.PUBLIC_CHECKOUT_DOMAIN,
       storeDomain: context.env.PUBLIC_STORE_DOMAIN,
     },
+    // Without img-src, images fall back to default-src (Shopify + self only). Third-party map:
+    imgSrc: [
+      "'self'",
+      'https://cdn.shopify.com',
+      'https://shopify.com',
+      'data:',
+      'https://publichk.cdn.ajmall-group.com',
+    ],
   });
 
   const body = await renderToReadableStream(

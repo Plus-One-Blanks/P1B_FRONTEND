@@ -1,18 +1,47 @@
-import { Suspense } from 'react';
-import { Await, NavLink, useAsyncValue } from 'react-router';
+import { Suspense, useEffect, useState } from 'react';
+import { Await, Link, NavLink, useAsyncValue } from 'react-router';
 import { useAnalytics, useOptimisticCart } from '@shopify/hydrogen';
+import { Search } from 'lucide-react';
 import { useAside } from '~/components/Aside';
-import { SearchFormPredictive } from '~/components/SearchFormPredictive';
+import { SolidButton } from '~/components/SolidButton';
 import logo from '~/assets/logo.svg';
+
+/** Primary nav — desktop tabs + mobile drawer (HeaderMenu). */
+export const HEADER_PRIMARY_NAV = [
+  { title: 'T-Shirts', url: '/collections/t-shirts' },
+  { title: 'Sweatshirts', url: '/collections/sweatshirts' },
+  { title: 'Polos', url: '/collections/polos' },
+  { title: 'Hats', url: '/collections/hats' },
+  { title: 'Jackets', url: '/collections/jackets' },
+  { title: 'Safety', url: '/collections/safety' },
+  { title: 'DTF Transfers', url: '/dtf-transfers' },
+];
+
+const HEADER_GET_IN_TOUCH_MAILTO =
+  'mailto:support@example.com?subject=Inquiry%20%E2%80%94%20Plus%201%20Blanks';
 
 /**
  * @param {HeaderProps}
  */
 export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
-  const { shop, menu } = header;
+  const { shop } = header;
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const threshold = 6;
+    const onScroll = () => {
+      setIsScrolled(window.scrollY > threshold);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
     <>
-      <header className="header">
+      <header
+        className={`header${isScrolled ? ' header--scrolled' : ''}`}
+      >
         <div className="header-top">
           <div className="header-top-left">
             <NavLink prefetch="intent" to="/" style={activeLinkStyle} end className="header-logo-link">
@@ -20,53 +49,51 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
                 <img src={logo} alt={shop.name} className="logo-image" />
               </div>
             </NavLink>
-            <HeaderSearch />
+            <HeaderNavTabs />
           </div>
 
           <div className="header-top-right">
             <HeaderCtas isLoggedIn={isLoggedIn} cart={cart} />
           </div>
         </div>
-        <div className="header-nav-bar">
-          <HeaderMenu
-            menu={menu}
-            viewport="desktop"
-            primaryDomainUrl={header.shop.primaryDomain.url}
-            publicStoreDomain={publicStoreDomain}
-          />
-          <NavLink to="/dtf-transfers" className="header-nav-special-link" style={activeLinkStyle}>
-            DTF Transfers
-          </NavLink>
-        </div>
       </header>
     </>
   );
 }
 
-function HeaderSearch() {
+function HeaderNavTabs() {
   return (
-    <div className="header-search">
-      <SearchFormPredictive>
-        {({ inputRef, fetchResults, goToSearch }) => (
-          <div className="header-search-container">
-            <input
-              ref={inputRef}
-              type="search"
-              name="q"
-              placeholder="Search Blank Products"
-              onChange={fetchResults}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  goToSearch();
-                }
-              }}
-              className="header-search-input"
-            />
-          </div>
-        )}
-      </SearchFormPredictive>
-    </div>
+    <nav className="header-nav-tabs" aria-label="Shop categories">
+      {HEADER_PRIMARY_NAV.map((item) => (
+        <NavLink
+          key={item.url}
+          end
+          prefetch="intent"
+          to={item.url}
+          className={({ isActive }) =>
+            ['header-nav-tab', isActive && 'header-nav-tab--current']
+              .filter(Boolean)
+              .join(' ')
+          }
+        >
+          {item.title}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+function HeaderSearchToggle() {
+  const { open } = useAside();
+  return (
+    <button
+      type="button"
+      className="header-icon-btn"
+      onClick={() => open('search')}
+      aria-label="Open search"
+    >
+      <Search size={22} strokeWidth={2} aria-hidden />
+    </button>
   );
 }
 
@@ -107,23 +134,13 @@ function HeaderRewards() {
  * }}
  */
 export function HeaderMenu({
-  menu,
-  primaryDomainUrl,
+  menu: _menu,
+  primaryDomainUrl: _primaryDomainUrl,
   viewport,
-  publicStoreDomain,
+  publicStoreDomain: _publicStoreDomain,
 }) {
   const className = `header-menu-${viewport}`;
   const { close } = useAside();
-
-  // Early release: flat links only. Re-enable mega-menu block below when catalog grows.
-  const navigationItems = [
-    {title: 'T-Shirts', url: '/collections/t-shirts'},
-    {title: 'Sweatshirts', url: '/collections/sweatshirts'},
-    {title: 'Polos', url: '/collections/polos'},
-    {title: 'Hats', url: '/collections/hats'},
-    {title: 'Jackets', url: '/collections/jackets'},
-    {title: 'Safety', url: '/collections/safety'},
-  ];
 
   return (
     <nav className={className} role="navigation">
@@ -138,9 +155,9 @@ export function HeaderMenu({
           Home
         </NavLink>
       )}
-      {navigationItems.map((item, index) => (
+      {HEADER_PRIMARY_NAV.map((item) => (
         <NavLink
-          key={index}
+          key={item.url}
           className="header-menu-item"
           end
           onClick={close}
@@ -428,14 +445,22 @@ export function HeaderMenu({
  */
 function HeaderCtas({ isLoggedIn, cart }) {
   return (
-    <nav className="header-ctas" role="navigation">
-      <HeaderMenuMobileToggle />
+    <nav className="header-ctas" role="navigation" aria-label="Account and utilities">
+      <HeaderSearchToggle />
+      <CartToggle cart={cart} />
       <Suspense fallback={<AccountLink isLoggedIn={false} />}>
         <Await resolve={isLoggedIn} errorElement={<AccountLink isLoggedIn={false} />}>
           {(loggedIn) => <AccountLink isLoggedIn={loggedIn} />}
         </Await>
       </Suspense>
-      <CartToggle cart={cart} />
+      <SolidButton
+        href={HEADER_GET_IN_TOUCH_MAILTO}
+        compact
+        className="header-get-in-touch"
+      >
+        Get in Touch
+      </SolidButton>
+      <HeaderMenuMobileToggle />
     </nav>
   );
 }
@@ -445,17 +470,10 @@ function AccountLink({ isLoggedIn }) {
     <NavLink
       prefetch="intent"
       to={isLoggedIn ? '/account' : '/account/login'}
-      className="header-account-link"
+      className="header-login-link"
       style={activeLinkStyle}
     >
-      <div className="header-account-text">
-        <div className="header-account-greeting">
-          {isLoggedIn ? 'Hello' : 'Hello, sign in'}
-        </div>
-        <div className="header-account-subtext">
-          {isLoggedIn ? 'My Account / Reorder' : 'Account'}
-        </div>
-      </div>
+      {isLoggedIn ? 'Account' : 'Login'}
     </NavLink>
   );
 }
@@ -477,16 +495,14 @@ function HeaderMenuMobileToggle() {
  * @param {{count: number | null}}
  */
 function CartBadge({ count }) {
-  const { open } = useAside();
   const { publish, shop, cart, prevCart } = useAnalytics();
 
   return (
-    <a
-      href="/cart"
-      className="header-cart-link"
-      onClick={(e) => {
-        e.preventDefault();
-        open('cart');
+    <Link
+      to="/cart"
+      prefetch="intent"
+      className="header-icon-btn header-cart-link"
+      onClick={() => {
         publish('cart_viewed', {
           cart,
           prevCart,
@@ -512,7 +528,7 @@ function CartBadge({ count }) {
       {count !== null && count > 0 && (
         <span className="header-cart-badge">{count}</span>
       )}
-    </a>
+    </Link>
   );
 }
 
@@ -551,9 +567,9 @@ const FALLBACK_HEADER_MENU = {
       id: 'gid://shopify/MenuItem/461609533496',
       resourceId: null,
       tags: [],
-      title: 'Blog',
+      title: 'News',
       type: 'HTTP',
-      url: '/blogs/journal',
+      url: '/blogs',
       items: [],
     },
     {

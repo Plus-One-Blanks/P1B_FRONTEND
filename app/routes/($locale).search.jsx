@@ -1,8 +1,16 @@
 import {useLoaderData} from 'react-router';
-import {getPaginationVariables, Analytics} from '@shopify/hydrogen';
+import {Search} from 'lucide-react';
+import {Analytics} from '@shopify/hydrogen';
 import {SearchForm} from '~/components/SearchForm';
 import {SearchResults} from '~/components/SearchResults';
 import {getEmptyPredictiveSearchResult} from '~/lib/search';
+import {buildSiblingColorDataByProductId} from '~/lib/productGroupColorData';
+import {
+  ALL_PRODUCTS_COLLECTION_HANDLE,
+  SEARCH_CATALOG_SHOW_INITIAL,
+  dedupeProductsByStyleGroup,
+  filterCollectionProductsByQuery,
+} from '~/lib/searchDrawerCollection';
 
 /**
  * @type {Route.MetaFunction}
@@ -38,82 +46,115 @@ export default function SearchPage() {
   if (type === 'predictive') return null;
 
   return (
-    <div className="search">
-      <h1>Search</h1>
-      <SearchForm>
-        {({inputRef}) => (
-          <>
-            <input
-              defaultValue={term}
-              name="q"
-              placeholder="Search…"
-              ref={inputRef}
-              type="search"
-            />
-            &nbsp;
-            <button type="submit">Search</button>
-          </>
-        )}
-      </SearchForm>
-      {error && <p style={{color: 'red'}}>{error}</p>}
-      {!term || !result?.total ? (
-        <SearchResults.Empty />
-      ) : (
-        <SearchResults result={result} term={term}>
-          {({articles, pages, products, term}) => (
-            <div>
-              <SearchResults.Products products={products} term={term} />
-              <SearchResults.Pages pages={pages} term={term} />
-              <SearchResults.Articles articles={articles} term={term} />
+    <div className="search-page">
+      <div className="search-page-constrain">
+        <h1 className="search-page-heading-sr">Search</h1>
+        <SearchForm
+          method="get"
+          className="search-drawer-form predictive-search-form search-page-form"
+        >
+          {({inputRef}) => (
+            <div className="search-drawer-query">
+              <span className="search-drawer-query-icon" aria-hidden>
+                <Search size={20} strokeWidth={2} />
+              </span>
+              <input
+                key={term}
+                defaultValue={term}
+                name="q"
+                className="search-drawer-query-input"
+                placeholder="What are you looking for?"
+                ref={inputRef}
+                type="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+              />
+              <button type="submit" className="search-drawer-submit">
+                Search
+              </button>
             </div>
           )}
+        </SearchForm>
+
+        <div className="search-page-body">
+          {error ? (
+            <p className="search-page-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          {!term?.trim() || !result?.total ? (
+            <SearchResults.Empty term={term} />
+          ) : null}
+        </div>
+      </div>
+
+      {term?.trim() && result?.total ? (
+        <SearchResults result={result} term={term}>
+          {({
+            articles,
+            pages,
+            products,
+            siblingColorDataByProductId,
+            term: searchTerm,
+          }) => (
+            <>
+              <SearchResults.Products
+                products={products}
+                siblingColorDataByProductId={siblingColorDataByProductId}
+                term={searchTerm}
+              />
+              <div className="search-page-constrain">
+                <div className="search-page-results search-page-results-secondary">
+                  <SearchResults.Pages pages={pages} term={searchTerm} />
+                  <SearchResults.Articles
+                    articles={articles}
+                    term={searchTerm}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </SearchResults>
-      )}
+      ) : null}
+
       <Analytics.SearchView data={{searchTerm: term, searchResults: result}} />
     </div>
   );
 }
 
-/**
- * Regular search query and fragments
- * (adjust as needed)
- */
-const SEARCH_PRODUCT_FRAGMENT = `#graphql
-  fragment SearchProduct on Product {
-    __typename
-    handle
+/** Same product fields as the homepage featured strip (image, swatches, From price). */
+const SEARCH_PAGE_CATALOG_PRODUCT_FRAGMENT = `#graphql
+  fragment SearchPageCatalogProduct on Product {
     id
-    publishedAt
+    handle
     title
-    trackingParameters
     vendor
-    selectedOrFirstAvailableVariant(
-      selectedOptions: []
-      ignoreUnknownOptions: true
-      caseInsensitiveMatch: true
-    ) {
+    tags
+    featuredImage {
       id
-      image {
-        url
-        altText
-        width
-        height
-      }
-      price {
+      altText
+      url
+      width
+      height
+    }
+    priceRange {
+      minVariantPrice {
         amount
         currencyCode
       }
-      compareAtPrice {
-        amount
-        currencyCode
-      }
-      selectedOptions {
-        name
-        value
-      }
-      product {
-        handle
-        title
+    }
+    options {
+      name
+      values
+    }
+    variants(first: 250) {
+      nodes {
+        selectedOptions {
+          name
+          value
+        }
       }
     }
   }
@@ -136,76 +177,50 @@ const SEARCH_ARTICLE_FRAGMENT = `#graphql
     id
     title
     trackingParameters
+    blog {
+      handle
+    }
   }
 `;
 
-const PAGE_INFO_FRAGMENT = `#graphql
-  fragment PageInfoFragment on PageInfo {
-    hasNextPage
-    hasPreviousPage
-    startCursor
-    endCursor
-  }
-`;
-
-// NOTE: https://shopify.dev/docs/api/storefront/latest/queries/search
+// Storefront search for pages + articles; products come from the all-products collection (see regularSearch).
+// https://shopify.dev/docs/api/storefront/latest/queries/search
 export const SEARCH_QUERY = `#graphql
   query RegularSearch(
     $country: CountryCode
-    $endCursor: String
-    $first: Int
     $language: LanguageCode
-    $last: Int
     $term: String!
-    $startCursor: String
+    $handle: String!
+    $catalogFirst: Int!
   ) @inContext(country: $country, language: $language) {
-    articles: search(
-      query: $term,
-      types: [ARTICLE],
-      first: $first,
-    ) {
+    articles: search(query: $term, types: [ARTICLE], first: 10) {
       nodes {
         ...on Article {
           ...SearchArticle
         }
       }
     }
-    pages: search(
-      query: $term,
-      types: [PAGE],
-      first: $first,
-    ) {
+    pages: search(query: $term, types: [PAGE], first: 10) {
       nodes {
         ...on Page {
           ...SearchPage
         }
       }
     }
-    products: search(
-      after: $endCursor,
-      before: $startCursor,
-      first: $first,
-      last: $last,
-      query: $term,
-      sortKey: RELEVANCE,
-      types: [PRODUCT],
-      unavailableProducts: HIDE,
-    ) {
-      nodes {
-        ...on Product {
-          ...SearchProduct
+    catalogCollection: collection(handle: $handle) {
+      products(first: $catalogFirst) {
+        nodes {
+          ...SearchPageCatalogProduct
         }
-      }
-      pageInfo {
-        ...PageInfoFragment
       }
     }
   }
-  ${SEARCH_PRODUCT_FRAGMENT}
+  ${SEARCH_PAGE_CATALOG_PRODUCT_FRAGMENT}
   ${SEARCH_PAGE_FRAGMENT}
   ${SEARCH_ARTICLE_FRAGMENT}
-  ${PAGE_INFO_FRAGMENT}
 `;
+
+const CATALOG_FETCH_FIRST = 250;
 
 /**
  * Regular search fetcher
@@ -218,28 +233,91 @@ export const SEARCH_QUERY = `#graphql
 async function regularSearch({request, context}) {
   const {storefront} = context;
   const url = new URL(request.url);
-  const variables = getPaginationVariables(request, {pageBy: 8});
   const term = String(url.searchParams.get('q') || '');
+  const trimmed = term.trim();
 
-  // Search articles, pages, and products for the `q` term
+  const emptyCatalogItems = () => ({
+    articles: {nodes: []},
+    pages: {nodes: []},
+    products: {
+      nodes: [],
+      showCount: 0,
+      totalCount: 0,
+      hasMore: false,
+    },
+    siblingColorDataByProductId: {},
+  });
+
+  if (!trimmed) {
+    return {
+      type: 'regular',
+      term,
+      error: undefined,
+      result: {total: 0, items: emptyCatalogItems()},
+    };
+  }
+
+  const showRaw = url.searchParams.get('show');
+  let showRequested = Number.parseInt(showRaw ?? '', 10);
+  if (
+    !Number.isFinite(showRequested) ||
+    showRequested < SEARCH_CATALOG_SHOW_INITIAL
+  ) {
+    showRequested = SEARCH_CATALOG_SHOW_INITIAL;
+  }
+
   const {errors, ...items} = await storefront.query(SEARCH_QUERY, {
-    variables: {...variables, term},
+    variables: {
+      term: trimmed,
+      handle: ALL_PRODUCTS_COLLECTION_HANDLE,
+      catalogFirst: CATALOG_FETCH_FIRST,
+    },
   });
 
   if (!items) {
     throw new Error('No search data returned from Shopify API');
   }
 
-  const total = Object.values(items).reduce(
-    (acc, {nodes}) => acc + nodes.length,
-    0,
+  const catalogNodes = items.catalogCollection?.products?.nodes ?? [];
+  const matchedStyles = dedupeProductsByStyleGroup(
+    filterCollectionProductsByQuery(catalogNodes, trimmed),
   );
+  const totalCatalog = matchedStyles.length;
+  const showCount = Math.min(showRequested, totalCatalog);
+  const visibleNodes = matchedStyles.slice(0, showCount);
+
+  const siblingColorDataByProductId =
+    visibleNodes.length > 0
+      ? await buildSiblingColorDataByProductId(storefront, visibleNodes)
+      : {};
+
+  const articleCount = items.articles?.nodes?.length ?? 0;
+  const pageCount = items.pages?.nodes?.length ?? 0;
+  const total = articleCount + pageCount + totalCatalog;
 
   const error = errors
     ? errors.map(({message}) => message).join(', ')
     : undefined;
 
-  return {type: 'regular', term, error, result: {total, items}};
+  return {
+    type: 'regular',
+    term,
+    error,
+    result: {
+      total,
+      items: {
+        articles: items.articles,
+        pages: items.pages,
+        products: {
+          nodes: visibleNodes,
+          showCount,
+          totalCount: totalCatalog,
+          hasMore: showCount < totalCatalog,
+        },
+        siblingColorDataByProductId,
+      },
+    },
+  };
 }
 
 /**

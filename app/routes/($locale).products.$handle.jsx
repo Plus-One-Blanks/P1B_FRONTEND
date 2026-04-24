@@ -11,6 +11,7 @@ import {
 } from '@shopify/hydrogen';
 import { ProductPrice } from '~/components/ProductPrice';
 import { ProductImage } from '~/components/ProductImage';
+import { ColorDropdown } from '~/components/ColorDropdown';
 import { ProductForm } from '~/components/ProductForm';
 import { ProductItem } from '~/components/ProductItem';
 import { BulkPricingTiers, getActiveTier } from '~/components/BulkPricingTiers';
@@ -1098,141 +1099,6 @@ function ProductColorSwatches({
         }}
       </Await>
     </Suspense>
-  );
-}
-
-/**
- * Color dropdown with search functionality
- * @param {{
- *   colors: Array<{code: string; name: string; product?: any; image?: any}>;
- *   selectedColor: string | null;
- *   onColorSelect: (color: string | null, product?: any, image?: any) => void;
- * }}
- */
-function ColorDropdown({ colors, selectedColor, onColorSelect }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef(null);
-
-  // Find the selected color object
-  const selectedColorObj = colors.find((c) => c.code === selectedColor);
-  const displayName = selectedColorObj?.name || 'Select a color';
-
-  // Filter colors based on search term
-  const filteredColors = colors.filter((color) =>
-    color.name.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-        setSearchTerm('');
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [isOpen]);
-
-  const handleColorSelect = (color) => {
-    onColorSelect(color.code, color.product, color.image);
-    setIsOpen(false);
-    setSearchTerm('');
-  };
-
-  return (
-    <div className="color-dropdown-container" ref={dropdownRef}>
-      <button
-        type="button"
-        className="color-dropdown-button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-      >
-        <div className="color-dropdown-selected">
-          {selectedColorObj && (
-            <span
-              className="color-dropdown-swatch"
-              style={{
-                backgroundColor: selectedColorObj.formattedCode || `#${selectedColorObj.code}`,
-              }}
-            />
-          )}
-          <span className="color-dropdown-text">{displayName}</span>
-        </div>
-        <svg
-          className={`color-dropdown-arrow ${isOpen ? 'open' : ''}`}
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 6l4 4 4-4" />
-        </svg>
-      </button>
-      {isOpen && (
-        <div className="color-dropdown-menu">
-          <div className="color-dropdown-search">
-            <input
-              type="text"
-              placeholder="Search colors..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="color-dropdown-search-input"
-              autoFocus
-            />
-          </div>
-          <div className="color-dropdown-options">
-            {filteredColors.length === 0 ? (
-              <div className="color-dropdown-no-results">No colors found</div>
-            ) : (
-              filteredColors.map((color) => (
-                <button
-                  key={color.code}
-                  type="button"
-                  className={`color-dropdown-option ${selectedColor === color.code ? 'selected' : ''
-                    }`}
-                  onClick={() => handleColorSelect(color)}
-                >
-                  <span
-                    className="color-dropdown-option-swatch"
-                    style={{
-                      backgroundColor: color.formattedCode || `#${color.code}`,
-                    }}
-                  />
-                  <span className="color-dropdown-option-name">{color.name}</span>
-                  {selectedColor === color.code && (
-                    <svg
-                      className="color-dropdown-check"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M13 3L6 10l-3-3" />
-                    </svg>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 

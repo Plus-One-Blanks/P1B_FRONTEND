@@ -1,6 +1,7 @@
 import {Analytics, getShopAnalytics, useNonce} from '@shopify/hydrogen';
 import {
   Outlet,
+  useLocation,
   useRouteError,
   isRouteErrorResponse,
   Links,
@@ -156,6 +157,16 @@ function loadDeferredData({context}) {
 /**
  * @param {{children?: React.ReactNode}}
  */
+/**
+ * Keys the framework outlet so each navigation gets a fresh route subtree. Without this,
+ * leaving `/cart` (DnD, optimistic cart, portaled modals) could leave the previous screen
+ * painted until a full reload even when the URL had already changed.
+ */
+function KeyedRootOutlet() {
+  const {key} = useLocation();
+  return <Outlet key={key} />;
+}
+
 export function Layout({children}) {
   const nonce = useNonce();
 
@@ -184,7 +195,7 @@ export default function App() {
   const data = useRouteLoaderData('root');
 
   if (!data) {
-    return <Outlet />;
+    return <KeyedRootOutlet />;
   }
 
   return (
@@ -194,7 +205,7 @@ export default function App() {
       consent={data.consent}
     >
       <PageLayout {...data}>
-        <Outlet />
+        <KeyedRootOutlet />
       </PageLayout>
     </Analytics.Provider>
   );

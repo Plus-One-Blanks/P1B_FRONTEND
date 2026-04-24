@@ -6,6 +6,113 @@ import { useAside } from './Aside';
 import { getActiveTier, getTierPrice, BULK_TIERS } from './BulkPricingTiers';
 
 /**
+ * Shopify size value looks like apparel (S–4XL, waist, etc.) — use full grid even if only one variant exists.
+ * @param {string | null | undefined} sizeName
+ */
+function isLikelyApparelSizeLabel(sizeName) {
+  const raw = String(sizeName ?? '').trim();
+  if (!raw) return false;
+  const n = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  const compact = n.replace(/[\s-]/g, '');
+
+  const codes = new Set([
+    'xxs',
+    'xs',
+    's',
+    'm',
+    'l',
+    'xl',
+    'xxl',
+    '2xl',
+    'xxxl',
+    '3xl',
+    '4xl',
+    '4x',
+    '5xl',
+    '5x',
+    '6xl',
+    '6x',
+  ]);
+  if (codes.has(n) || codes.has(compact)) return true;
+
+  const words = ['small', 'medium', 'large', 'x-large', 'xx-large'];
+  if (words.includes(n)) return true;
+
+  return false;
+}
+
+/**
+ * Normalize size labels so "Large" / "l" / "L" match the same grid row and variant.
+ * @param {string | null | undefined} label
+ */
+function canonicalApparelSizeToken(label) {
+  const n = String(label ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  const c = n.replace(/[\s-]/g, '');
+  if (n === 'xxs' || c === 'xxs') return 'xxs';
+  if (n === 'xs' || n === 'x-small' || c === 'xs') return 'xs';
+  if (n === 's' || n === 'small' || c === 'small') return 's';
+  if (n === 'm' || n === 'medium' || c === 'medium') return 'm';
+  if (n === 'l' || n === 'large' || c === 'large') return 'l';
+  if (n === 'xl' || n === 'x-large' || n === 'xlarge' || c === 'xlarge') {
+    return 'xl';
+  }
+  if (
+    n === '2xl' ||
+    n === 'xxl' ||
+    n === 'xx-large' ||
+    n === 'xxlarge' ||
+    c === '2xl' ||
+    c === 'xxl'
+  ) {
+    return '2xl';
+  }
+  if (n === '3xl' || n === 'xxxl' || c === '3xl' || c === 'xxxl') return '3xl';
+  if (n === '4xl' || n === '4x' || c === '4xl' || c === '4x') return '4xl';
+  if (n === '5xl' || n === '5x' || c === '5xl') return '5xl';
+  if (n === '6xl' || n === '6x' || c === '6xl') return '6xl';
+  return c || n;
+}
+
+/**
+ * Single size option that is NOT apparel lettering (e.g. OS, One Size) — compact one-row UI.
+ * @param {import('@shopify/hydrogen').MappedProductOptions | null | undefined} sizeOption
+ */
+function isAccessorySingleSizeLayout(sizeOption) {
+  if (!sizeOption || sizeOption.optionValues.length !== 1) return false;
+  const name = sizeOption.optionValues[0]?.name;
+  return !isLikelyApparelSizeLabel(name);
+}
+
+/**
+ * @param {import('@shopify/hydrogen').MappedProductOptions | null | undefined} sizeOption
+ */
+function useFullApparelSizeGrid(sizeOption) {
+  return Boolean(
+    sizeOption &&
+      (sizeOption.optionValues.length > 1 ||
+        !isAccessorySingleSizeLayout(sizeOption)),
+  );
+}
+
+/**
+ * @param {Record<string, number>} quantities
+ * @param {string} label
+ */
+function quantityForSizeLabel(quantities, label) {
+  if (!quantities || label == null) return 0;
+  const want = canonicalApparelSizeToken(label);
+  for (const [k, v] of Object.entries(quantities)) {
+    if (canonicalApparelSizeToken(k) === want) {
+      return Math.max(0, Number(v) || 0);
+    }
+  }
+  return 0;
+}
+
+/**
  * @param {{
  *   productOptions: MappedProductOptions[];
  *   selectedVariant: ProductFragment['selectedOrFirstAvailableVariant'];
@@ -47,14 +154,12 @@ export function ProductForm({
     setSizeQuantities({});
   }, [selectedColorProduct?.id]);
 
-  // Check if this is an accessory (single size) or product with multiple sizes
-  const isAccessory =
-    effectiveSizeOption && effectiveSizeOption.optionValues.length === 1;
-  const hasMultipleSizes =
-    effectiveSizeOption && effectiveSizeOption.optionValues.length > 1;
+  const showFullSizeGrid = useFullApparelSizeGrid(effectiveSizeOption);
+  const showAccessoryOneSize = isAccessorySingleSizeLayout(effectiveSizeOption);
 
-  // If we have a Size option with multiple values, use the new size selector with S-4XL
-  if (hasMultipleSizes) {
+  // Apparel: multiple sizes OR one real size (e.g. only "L") — full S–4XL grid, missing sizes sold out.
+  // Accessories: single OS / One Size / non-apparel label — one compact row.
+  if (showFullSizeGrid) {
     const handleQuantityChange = (sizeName, quantity) => {
       setSizeQuantities((prev) => {
         const updated = {
@@ -66,7 +171,7 @@ export function ProductForm({
         if (onProjectedTotalChange) {
           let projectedTotal = currentCartTotal;
           effectiveSizeOption.optionValues.forEach((value) => {
-            const qty = updated[value.name] || 0;
+            const qty = quantityForSizeLabel(updated, value.name);
             if (qty > 0) {
               // Find variant price
               let variant = findVariantForSize(value.name);
@@ -92,7 +197,7 @@ export function ProductForm({
       if (!selectedColorProduct || !selectedColorProduct.adjacentVariants) {
         return null;
       }
-      const normalizedSizeName = sizeName?.trim();
+      const want = canonicalApparelSizeToken(sizeName);
       const matchingVariant = selectedColorProduct.adjacentVariants.find((variant) => {
         if (!variant?.selectedOptions) return false;
         if (variant.product?.handle !== selectedColorProduct.handle) {
@@ -102,8 +207,7 @@ export function ProductForm({
           (opt) => opt?.name?.toLowerCase() === 'size',
         );
         if (!sizeOption) return false;
-        const variantSizeValue = sizeOption.value?.trim();
-        return variantSizeValue === normalizedSizeName;
+        return canonicalApparelSizeToken(sizeOption.value) === want;
       });
       return matchingVariant || null;
     };
@@ -111,7 +215,7 @@ export function ProductForm({
     // Build cart lines using variants from the selected color product
     const cartLines = effectiveSizeOption.optionValues
       .filter((value) => {
-        const quantity = sizeQuantities[value.name];
+        const quantity = quantityForSizeLabel(sizeQuantities, value.name);
         if (!quantity || quantity <= 0) return false;
 
         // Find variant for this size
@@ -132,7 +236,7 @@ export function ProductForm({
 
         return {
           merchandiseId: variant?.id,
-          quantity: sizeQuantities[value.name],
+          quantity: quantityForSizeLabel(sizeQuantities, value.name),
           selectedVariant: variant,
         };
       })
@@ -166,13 +270,14 @@ export function ProductForm({
     );
   }
 
-  // If it's an accessory (single size), show "One Size" block
-  if (isAccessory) {
+  if (showAccessoryOneSize) {
     const variant = effectiveSelectedVariant;
     const basePrice = variant?.price?.amount ? parseFloat(variant.price.amount) : 0;
 
-    // Get quantity for one size
-    const oneSizeQuantity = sizeQuantities['One Size'] || 0;
+    const onlySizeLabel = String(
+      effectiveSizeOption?.optionValues?.[0]?.name ?? 'One Size',
+    );
+    const oneSizeQuantity = sizeQuantities[onlySizeLabel] || 0;
 
     // Calculate projected total including this item to determine tier
     const projectedTotalWithThis = currentCartTotal + (basePrice * oneSizeQuantity);
@@ -195,7 +300,7 @@ export function ProductForm({
       setSizeQuantities((prev) => {
         const updated = {
           ...prev,
-          'One Size': quantity,
+          [onlySizeLabel]: quantity,
         };
 
         // Calculate projected cart total
@@ -248,7 +353,7 @@ export function ProductForm({
           <h5 className="size-selector-title">Choose Size</h5>
           <div className="size-selector-grid">
             <div className="size-selector-item">
-              <div className="size-label">One Size</div>
+              <div className="size-label">{onlySizeLabel}</div>
               <div className="size-input-container">
                 <input
                   type="number"
@@ -438,10 +543,9 @@ function SizeSelectorWithQuantities({
     }
 
     // Normalize the size name for comparison
-    const normalizedSizeName = sizeName?.trim();
+    const want = canonicalApparelSizeToken(sizeName);
 
     // Find variant in selected color product that matches this size
-    // Match by comparing the size option value (case-insensitive for option name, exact for value)
     const matchingVariant = selectedColorProduct.adjacentVariants.find((variant) => {
       if (!variant?.selectedOptions) return false;
 
@@ -456,9 +560,7 @@ function SizeSelectorWithQuantities({
 
       if (!sizeOption) return false;
 
-      // Compare size values (trim and exact match)
-      const variantSizeValue = sizeOption.value?.trim();
-      return variantSizeValue === normalizedSizeName;
+      return canonicalApparelSizeToken(sizeOption.value) === want;
     });
 
     return matchingVariant || null;
@@ -468,10 +570,15 @@ function SizeSelectorWithQuantities({
   // Always show S-4XL sizes regardless of what's available
   const standardSizes = alwaysShowSizes || ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'];
 
-  // Create a map of available sizes for quick lookup
+  // Case-insensitive map (Shopify may use "xl" vs grid "XL")
   const availableSizesMap = new Map();
   sizeOption.optionValues.forEach((value) => {
-    availableSizesMap.set(value.name, value);
+    const rawKey = String(value.name).trim().toLowerCase();
+    availableSizesMap.set(rawKey, value);
+    const tok = canonicalApparelSizeToken(value.name);
+    if (tok) {
+      availableSizesMap.set(tok, value);
+    }
   });
 
   return (
@@ -479,13 +586,16 @@ function SizeSelectorWithQuantities({
       <h5 className="size-selector-title">Choose Size</h5>
       <div className="size-selector-grid">
         {standardSizes.map((sizeName) => {
-          // Get the value from available sizes, or create a placeholder
-          const value = availableSizesMap.get(sizeName) || {
-            name: sizeName,
-            firstSelectableVariant: null,
-            available: false,
-            exists: false,
-          };
+          const lookupKey = String(sizeName).trim().toLowerCase();
+          const canon = canonicalApparelSizeToken(sizeName);
+          const value =
+            availableSizesMap.get(canon) ||
+            availableSizesMap.get(lookupKey) || {
+              name: sizeName,
+              firstSelectableVariant: null,
+              available: false,
+              exists: false,
+            };
           // First try to find variant from selected color product by matching size
           let variant = findVariantForSize(value.name);
 
@@ -495,7 +605,9 @@ function SizeSelectorWithQuantities({
             // Try using the effective size option's firstSelectableVariant
             // but verify it belongs to the selected color product and matches the size
             const colorSizeValue = effectiveSizeOption.optionValues.find(
-              (v) => v.name === value.name,
+              (v) =>
+                canonicalApparelSizeToken(v.name) ===
+                canonicalApparelSizeToken(value.name),
             );
             const candidateVariant = colorSizeValue?.firstSelectableVariant;
 
@@ -504,10 +616,9 @@ function SizeSelectorWithQuantities({
               const variantSizeOption = candidateVariant.selectedOptions?.find(
                 (opt) => opt?.name?.toLowerCase() === 'size',
               );
-              const variantSizeValue = variantSizeOption?.value?.trim();
-
               if (candidateVariant.product?.handle === selectedColorProduct.handle &&
-                variantSizeValue === value.name.trim()) {
+                canonicalApparelSizeToken(variantSizeOption?.value) ===
+                  canonicalApparelSizeToken(value.name)) {
                 variant = candidateVariant;
               }
             }
@@ -518,7 +629,7 @@ function SizeSelectorWithQuantities({
             variant = value.firstSelectableVariant;
           }
 
-          const quantity = sizeQuantities[value.name] || 0;
+          const quantity = quantityForSizeLabel(sizeQuantities, value.name);
           const basePrice = variant?.price?.amount
             ? parseFloat(variant.price.amount)
             : 0;

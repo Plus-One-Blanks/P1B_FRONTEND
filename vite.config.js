@@ -9,7 +9,9 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     hydrogen(),
-    oxygen(),
+    // Bump Oxygen compatibility to reduce worker cancellation warnings during HMR.
+    // (Cloudflare surfaces these as "hanging Promise was canceled" messages.)
+    oxygen({compatibilityDate: '2026-03-01'}),
     reactRouter(),
     tsconfigPaths(),
   ],

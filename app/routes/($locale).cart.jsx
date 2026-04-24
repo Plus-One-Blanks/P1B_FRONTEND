@@ -7,7 +7,7 @@ import {getActiveTier, BULK_TIERS} from '~/components/BulkPricingTiers';
  * @type {Route.MetaFunction}
  */
 export const meta = () => {
-  return [{title: `Hydrogen | Cart`}];
+  return [{title: 'Cart'}];
 };
 
 /**
@@ -249,8 +249,7 @@ export default function Cart() {
   const cart = useLoaderData();
 
   return (
-    <div className="cart">
-      <h1>Cart</h1>
+    <div className="cart-page">
       <CartMain layout="page" cart={cart} />
     </div>
   );

@@ -1,5 +1,5 @@
 import {useFetcher, useNavigate} from 'react-router';
-import React, {useRef, useEffect} from 'react';
+import React, {useCallback, useRef, useEffect} from 'react';
 import {useAside} from './Aside';
 
 export const SEARCH_ENDPOINT = '/search';
@@ -11,6 +11,7 @@ export const SEARCH_ENDPOINT = '/search';
 export function SearchFormPredictive({
   children,
   className = 'predictive-search-form',
+  onSearchNavigate,
   ...props
 }) {
   const fetcher = useFetcher({key: 'search'});
@@ -18,26 +19,28 @@ export function SearchFormPredictive({
   const navigate = useNavigate();
   const aside = useAside();
 
-  /** Reset the input value and blur the input */
-  function resetInput(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (inputRef?.current?.value) {
-      inputRef.current.blur();
-    }
-  }
-
   /** Navigate to the search page with the current input value */
-  function goToSearch() {
-    const term = inputRef?.current?.value;
-    void navigate(SEARCH_ENDPOINT + (term ? `?q=${term}` : ''));
+  const goToSearch = useCallback(() => {
+    const raw = inputRef?.current?.value;
+    const term = raw != null ? String(raw).trim() : '';
+    if (onSearchNavigate) {
+      onSearchNavigate(term);
+    }
+    void navigate(
+      SEARCH_ENDPOINT + (term ? `?q=${encodeURIComponent(term)}` : ''),
+    );
     aside.close();
+  }, [aside, navigate, onSearchNavigate]);
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    goToSearch();
   }
 
   /** Fetch search results based on the input value */
   function fetchResults(event) {
     void fetcher.submit(
-      {q: event.target.value || '', limit: 5, predictive: true},
+      {q: event.target.value || '', limit: 10, predictive: true},
       {method: 'GET', action: SEARCH_ENDPOINT},
     );
   }
@@ -53,7 +56,7 @@ export function SearchFormPredictive({
   }
 
   return (
-    <fetcher.Form {...props} className={className} onSubmit={resetInput}>
+    <fetcher.Form {...props} className={className} onSubmit={handleSubmit}>
       {children({inputRef, fetcher, fetchResults, goToSearch})}
     </fetcher.Form>
   );
@@ -70,6 +73,7 @@ export function SearchFormPredictive({
 /**
  * @typedef {Omit<FormProps, 'children'> & {
  *   children: SearchFormPredictiveChildren | null;
+ *   onSearchNavigate?: (term: string) => void;
  * }} SearchFormPredictiveProps
  */
 

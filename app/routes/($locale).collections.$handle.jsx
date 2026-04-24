@@ -1,10 +1,10 @@
 import {redirect, useLoaderData} from 'react-router';
-import {useState, useMemo, useEffect, useRef} from 'react';
+import {useState, useEffect, useRef, useMemo} from 'react';
 import {getPaginationVariables, Analytics} from '@shopify/hydrogen';
-import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
 import {redirectIfHandleIsLocalized} from '~/lib/redirect';
-import {ProductItem} from '~/components/ProductItem';
 import {CollectionBanner} from '~/routes/($locale)._index';
+import {HomeFeaturedProductCard} from '~/components/HomeFeaturedProductCard';
+import {buildSiblingColorDataByProductId} from '~/lib/productGroupColorData';
 import {CollectionFilters} from '~/components/CollectionFilters';
 
 /**
@@ -60,8 +60,15 @@ async function loadCriticalData({context, params, request}) {
   // The API handle might be localized, so redirect to the localized handle
   redirectIfHandleIsLocalized(request, {handle, data: collection});
 
+  const collectionNodes = collection.products?.nodes ?? [];
+  const collectionSiblingColorData = await buildSiblingColorDataByProductId(
+    storefront,
+    collectionNodes,
+  );
+
   return {
     collection,
+    collectionSiblingColorData,
   };
 }
 
@@ -71,22 +78,22 @@ async function loadCriticalData({context, params, request}) {
  * Make sure to not throw any errors here, as it will cause the page to 500.
  * @param {Route.LoaderArgs}
  */
-function loadDeferredData({context}) {
+function loadDeferredData() {
   return {};
 }
 
 export default function Collection() {
   /** @type {LoaderReturnData} */
-  const {collection} = useLoaderData();
+  const {collection, collectionSiblingColorData} = useLoaderData();
 
-  // Generate dynamic title based on collection title
-  const bannerTitle = `Blank ${collection.title} at Wholesale Prices`;
-
-  // Get all products from the collection
-  const allProducts = collection.products?.nodes || [];
+  const allProducts = useMemo(
+    () => collection.products?.nodes || [],
+    [collection],
+  );
   const [filteredProducts, setFilteredProducts] = useState(allProducts);
   const [activeFilters, setActiveFilters] = useState([]);
   const filtersRef = useRef(null);
+  const filterChromeRef = useRef(null);
 
   // Update filtered products when collection changes
   useEffect(() => {
@@ -97,79 +104,84 @@ export default function Collection() {
     filtersRef.current?.removeFilter?.(type, value);
   };
 
-  // Create a mock connection object for PaginatedResourceSection
-  const filteredConnection = useMemo(() => {
-    return {
-      nodes: filteredProducts,
-      pageInfo: {
-        hasNextPage: false,
-        hasPreviousPage: false,
-        endCursor: null,
-        startCursor: null,
-      },
-    };
-  }, [filteredProducts]);
+  const handleClearAllFilters = () => {
+    filtersRef.current?.clearAllFilters?.();
+  };
 
   return (
     <div className="collection">
-      <CollectionBanner 
-        title={bannerTitle}
-        description={collection.description}
-      />
+      <CollectionBanner collection={collection} />
       <div className="collection-content-wrapper">
-        <div className="collection-sidebar">
+        <div
+          ref={filterChromeRef}
+          className={
+            activeFilters.length > 0
+              ? 'collection-filters-sticky-stack collection-filters-sticky-stack--has-active-filters'
+              : 'collection-filters-sticky-stack'
+          }
+        >
           <CollectionFilters
             ref={filtersRef}
+            chromeRootRef={filterChromeRef}
             products={allProducts}
             onFilterChange={setFilteredProducts}
             onActiveFiltersChange={setActiveFilters}
+            itemCount={filteredProducts.length}
           />
-        </div>
-        <div className="collection-products">
-          <div className="collection-products-header">
-            <span className="collection-products-count">
-              Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
-            </span>
-          </div>
           {activeFilters.length > 0 && (
-            <div className="active-filters">
-              {activeFilters.map((filter) => (
+            <div className="collection-sticky-active-filters">
+              <div className="active-filters-row">
+                <div className="active-filters">
+                  {activeFilters.map((filter) => (
+                    <button
+                      key={`${filter.type}-${filter.value}`}
+                      type="button"
+                      className="active-filter-chip"
+                      onClick={() => handleRemoveFilter(filter.type, filter.value)}
+                    >
+                      <span className="active-filter-chip-label">
+                        {filter.label}: {filter.value}
+                      </span>
+                      <span className="active-filter-chip-remove" aria-label={`Remove ${filter.label} ${filter.value}`}>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M9 3L3 9M3 3l6 6" />
+                        </svg>
+                      </span>
+                    </button>
+                  ))}
+                </div>
                 <button
-                  key={`${filter.type}-${filter.value}`}
                   type="button"
-                  className="active-filter-chip"
-                  onClick={() => handleRemoveFilter(filter.type, filter.value)}
+                  className="active-filters-clear-all"
+                  onClick={handleClearAllFilters}
                 >
-                  <span className="active-filter-chip-label">
-                    {filter.label}: {filter.value}
-                  </span>
-                  <span className="active-filter-chip-remove" aria-label={`Remove ${filter.label} ${filter.value}`}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <path d="M9 3L3 9M3 3l6 6" />
-                    </svg>
-                  </span>
+                  Clear all filters
                 </button>
-              ))}
+              </div>
             </div>
           )}
+        </div>
+        <div className="collection-products">
           <div
             key={`grid-${filteredProducts.length}-${filteredProducts[0]?.id ?? ''}-${filteredProducts[filteredProducts.length - 1]?.id ?? ''}`}
-            className="products-grid-transition"
+            className="collection-products-featured"
           >
-            <div className="products-grid">
-              {filteredProducts.map((product, index) => (
-                <div
-                  key={product.id}
-                  className="product-item-wrapper"
-                  style={{ '--i': index }}
-                >
-                  <ProductItem
-                    product={product}
-                    loading={index < 8 ? 'eager' : undefined}
-                  />
+            {filteredProducts.length === 0 ? (
+              <p className="collection-products-empty">No products match these filters.</p>
+            ) : (
+              <div className="home-featured-grid-bleed">
+                <div className="home-featured-grid">
+                  {filteredProducts.map((product, index) => (
+                    <HomeFeaturedProductCard
+                      key={product.id}
+                      product={product}
+                      siblingColorData={collectionSiblingColorData?.[product.id]}
+                      imageLoading={index < 8 ? 'eager' : 'lazy'}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -210,6 +222,18 @@ const PRODUCT_ITEM_FRAGMENT = `#graphql
       }
       maxVariantPrice {
         ...MoneyProductItemCollection
+      }
+    }
+    options {
+      name
+      values
+    }
+    variants(first: 250) {
+      nodes {
+        selectedOptions {
+          name
+          value
+        }
       }
     }
   }
