@@ -1,7 +1,6 @@
 import { Image, Money } from '@shopify/hydrogen';
 import { Link } from 'react-router';
 import { groupCartLinesForPageDisplay } from '~/lib/cartEditSizes';
-import { applyStoredGroupOrder } from '~/lib/cartPageGroupOrder';
 import { cartRetailSubtotalFromLines } from '~/lib/cartRetailPricing';
 
 /**
@@ -52,10 +51,7 @@ export function CartSummary({ cart, layout }) {
 
   const tax = parseFloat(cart?.cost?.totalTaxAmount?.amount || 0);
   const lines = cart?.lines?.nodes ?? [];
-  const summaryThumbGroups = applyStoredGroupOrder(
-    groupCartLinesForPageDisplay(lines),
-    cart?.id ?? '',
-  );
+  const summaryThumbGroups = groupCartLinesForPageDisplay(lines);
   const subtotalNum = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
   const retailSubtotal = cartRetailSubtotalFromLines(lines);
   /** PDP-style retail (2× variant price × qty) minus actual merchandise subtotal after bulk pricing. */

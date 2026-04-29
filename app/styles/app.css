@@ -1103,14 +1103,6 @@ main:has(> .cart-page) {
   color: #0a0a0a;
 }
 
-.cart-page-drag-hint {
-  margin: 0 0 0.65rem;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  color: #71717a;
-  max-width: 40rem;
-}
-
 /* Filled cart: two grid cells — left column (title + lines), right column (summary). */
 .cart-page-layout {
   display: grid;
@@ -1159,10 +1151,6 @@ main:has(> .cart-page) {
   gap: 0.5rem;
 }
 
-.cart-page-lines-card .cart-lines-list--page.cart-page-sortable-list {
-  gap: 0;
-}
-
 .cart-line--page {
   display: block;
   margin: 0;
@@ -1172,62 +1160,6 @@ main:has(> .cart-page) {
   cursor: default;
 }
 
-/* @dnd-kit sortable cart rows (grip-only activation; PointerSensor distance 8 in JS) */
-.cart-page-sortable-list {
-  --cart-sortable-accent: #007aff;
-}
-
-.cart-page-sortable-row:not(:first-child) {
-  border-top: 1px solid #f4f4f5;
-  padding-top: 0.5rem;
-}
-
-.cart-page-sortable-row--dragging {
-  position: relative;
-  z-index: 10;
-  opacity: 0.5;
-}
-
-.cart-page-sortable-row--dragging .cart-line-page-card {
-  box-shadow:
-    0 10px 15px -3px rgba(15, 23, 42, 0.12),
-    0 4px 6px -4px rgba(15, 23, 42, 0.08);
-  border-radius: 10px;
-}
-
-.cart-line-page-card--sortable-dragging {
-  border-color: #e5e7eb;
-}
-
-.cart-line-page-drag-grip--sortable {
-  touch-action: none;
-  cursor: grab;
-  border-radius: 8px;
-}
-
-.cart-line-page-drag-grip--sortable:active {
-  cursor: grabbing;
-}
-
-.cart-line-page-drag-grip--sortable:focus-visible {
-  outline: 2px solid var(--cart-sortable-accent);
-  outline-offset: 2px;
-}
-
-.cart-page-sortable-list--dragging .cart-line-page-card .cart-line-page-header a,
-.cart-page-sortable-list--dragging .cart-line-page-card .cart-line-page-footer a,
-.cart-page-sortable-list--dragging .cart-line-page-card .cart-line-page-footer button,
-.cart-page-sortable-list--dragging
-  .cart-line-page-card
-  .cart-line-page-size-row
-  button {
-  pointer-events: none;
-}
-
-.cart-page-sortable-list--dragging .cart-line-page-toolbar-remove button {
-  pointer-events: auto;
-}
-
 .cart-line-page-card {
   position: relative;
   background: #fff;
@@ -1235,20 +1167,7 @@ main:has(> .cart-page) {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  /* Drag grip: same inset from top & left as header top padding; tight gutter before thumb */
   --cart-page-drag-inset: 0.65rem;
-  --cart-page-drag-track: 1.3125rem;
-  --cart-page-drag-gutter: 0.28rem;
-}
-
-.cart-line-page-toolbar {
-  position: absolute;
-  top: var(--cart-page-drag-inset);
-  left: var(--cart-page-drag-inset);
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
 }
 
 .cart-line-page-toolbar-remove {
@@ -1259,16 +1178,6 @@ main:has(> .cart-page) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-}
-
-.cart-line-page-drag-grip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #a1a1aa;
-  line-height: 0;
-  cursor: grab;
-  user-select: none;
 }
 
 .cart-line-remove-btn--remove-all {
@@ -1413,17 +1322,8 @@ main:has(> .cart-page) {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem 1rem;
-  /* Right inset for top-right remove (X); left default until reorder adds gutter */
   padding: 0.65rem 2.75rem 0.7rem 1rem;
   border-bottom: 1px solid #f0f0f0;
-}
-
-/* Reorder grip (left) is absolute; left padding = inset + grip column + small gap to thumb. */
-.cart-line-page-card--reorder .cart-line-page-header {
-  padding-left: calc(
-    var(--cart-page-drag-inset) + var(--cart-page-drag-track) +
-      var(--cart-page-drag-gutter)
-  );
 }
 
 .cart-line-page-size-row {
@@ -6307,6 +6207,18 @@ form.search-drawer-form.predictive-search-form {
   @media (min-width: 45em) {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* --- /collections landing (curated snippets) — mirrors homepage sections: ~10% inset only --- */
+.collections-index {
+  background: #fff;
+  padding-top: clamp(2.5rem, 5vw, 4rem);
+  padding-bottom: clamp(2rem, 5vw, 4rem);
+  box-sizing: border-box;
+}
+
+.collections-index-header {
+  margin-bottom: clamp(2rem, 4vw, 3rem);
 }
 
 .collection-section {

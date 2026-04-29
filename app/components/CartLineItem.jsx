@@ -17,11 +17,10 @@ import {
   isColorLikeOptionName,
   nonSizeSelectedOptions,
 } from '~/lib/cartEditSizes';
-import { ArrowRight, GripVertical } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { ArrowRight } from 'lucide-react';
+import { Link, useFetcher, useLocation, useNavigate } from 'react-router';
 import { CartAddColorModal } from '~/components/CartAddColorModal';
 import { CartEditSizesModal } from '~/components/CartEditSizesModal';
-import { groupKeyForLineGroup } from '~/lib/cartPageGroupOrder';
 import { retailLineTotalForLine } from '~/lib/cartRetailPricing';
 import { useAside } from './Aside';
 
@@ -85,12 +84,6 @@ function computeCartLineDisplayPricing(line, cart) {
  *   line?: CartLine;
  *   lines?: CartLine[];
  *   cart?: CartApiQueryFragment | null;
- *   pageGroupIndex?: number;
- *   pageSortableGrip?: {
- *     listeners: Record<string, unknown>;
- *     attributes: Record<string, unknown>;
- *     isDragging: boolean;
- *   };
  * }}
  */
 export function CartLineItem({
@@ -98,8 +91,6 @@ export function CartLineItem({
   line,
   lines: linesProp,
   cart,
-  pageGroupIndex,
-  pageSortableGrip,
 }) {
   const lines = linesProp ?? (line ? [line] : []);
   const primaryLine = lines[0];
@@ -213,36 +204,12 @@ export function CartLineItem({
   const [addColorModalOpen, setAddColorModalOpen] = useState(false);
   const [removeGroupModalOpen, setRemoveGroupModalOpen] = useState(false);
 
-  const pageLineIdsKey = lines.map((l) => l.id).join('::');
-  const pageGroupKey = useMemo(
-    () => groupKeyForLineGroup(lines),
-    [pageLineIdsKey, lines],
-  );
-  const pageReorderEnabled = Boolean(pageSortableGrip);
   const anyLineOptimistic = lines.some((l) => l.isOptimistic);
   const removeAllLineIds = lines.map((l) => l.id);
 
   const pageInner = (
     <>
-        <div
-          className={
-            'cart-line-page-card' +
-            (pageReorderEnabled ? ' cart-line-page-card--reorder' : '') +
-            (pageSortableGrip?.isDragging ? ' cart-line-page-card--sortable-dragging' : '')
-          }
-        >
-          {pageReorderEnabled && pageSortableGrip ? (
-            <div className="cart-line-page-toolbar">
-              <span
-                className="cart-line-page-drag-grip cart-line-page-drag-grip--sortable"
-                aria-label="Drag to reorder cart row"
-                {...pageSortableGrip.listeners}
-                {...pageSortableGrip.attributes}
-              >
-                <GripVertical size={18} strokeWidth={2} aria-hidden />
-              </span>
-            </div>
-          ) : null}
+        <div className="cart-line-page-card">
           <div className="cart-line-page-toolbar-remove">
             <span className="cart-line-page-remove-all-wrap">
               <button
@@ -275,7 +242,6 @@ export function CartLineItem({
           <div className="cart-line-page-header">
             {image ? (
               <Link
-                draggable={pageSortableGrip ? false : undefined}
                 className="cart-line-page-media cart-line-page-media--header-thumb"
                 to={lineItemUrl}
                 onClick={() => close()}
@@ -301,7 +267,6 @@ export function CartLineItem({
 
             <div className="cart-line-page-info">
               <Link
-                draggable={pageSortableGrip ? false : undefined}
                 className="cart-line-page-title-link"
                 to={lineItemUrl}
                 onClick={() => close()}
@@ -427,9 +392,6 @@ export function CartLineItem({
   );
 
   if (layout === 'page') {
-    if (pageSortableGrip) {
-      return pageInner;
-    }
     return (
       <li key={lines.map((l) => l.id).join('::')} className={lineClass}>
         {pageInner}
@@ -564,6 +526,30 @@ function CartRemoveGroupConfirmModal({
   const titleId = useId();
   const descId = useId();
   const cancelRef = useRef(null);
+  const removeFetcherKey = useMemo(
+    () => ['remove-all', ...lineIds].sort().join('-'),
+    [lineIds],
+  );
+  const removeFetcher = useFetcher({ key: removeFetcherKey });
+  /** After the user submits removal, we saw a non-idle fetcher; close when it settles. */
+  const removeStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      removeStartedRef.current = false;
+      return;
+    }
+    if (removeFetcher.state !== 'idle') {
+      removeStartedRef.current = true;
+      return;
+    }
+    if (!removeStartedRef.current) return;
+    removeStartedRef.current = false;
+    onClose();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cartUpdated'));
+    }
+  }, [open, removeFetcher.state, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -627,7 +613,7 @@ function CartRemoveGroupConfirmModal({
             Cancel
           </button>
           <CartForm
-            fetcherKey={['remove-all', ...lineIds].sort().join('-')}
+            fetcherKey={removeFetcherKey}
             route="/cart"
             action={CartForm.ACTIONS.LinesRemove}
             inputs={{ lineIds }}
@@ -636,11 +622,8 @@ function CartRemoveGroupConfirmModal({
             <button
               type="submit"
               className="cart-edit-sizes-btn cart-edit-sizes-btn--danger"
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                queueMicrotask(() => onClose());
-              }}
+              disabled={disabled || removeFetcher.state !== 'idle'}
+              onClick={(e) => e.stopPropagation()}
             >
               Remove
             </button>

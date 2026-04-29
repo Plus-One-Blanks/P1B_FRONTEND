@@ -21,19 +21,24 @@ import {PageLayout} from './components/PageLayout';
  * This is important to avoid re-fetching root queries on sub-navigations
  * @type {ShouldRevalidateFunction}
  */
-export const shouldRevalidate = ({formMethod, currentUrl, nextUrl}) => {
+export const shouldRevalidate = ({
+  formMethod,
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}) => {
   // revalidate when a mutation is performed e.g add to cart, login...
   if (formMethod && formMethod !== 'GET') return true;
 
   // revalidate when manually revalidating via useRevalidator
   if (currentUrl.toString() === nextUrl.toString()) return true;
 
-  // Defaulting to no revalidation for root loader data to improve performance.
-  // When using this feature, you risk your UI getting out of sync with your server.
-  // Use with caution. If you are uncomfortable with this optimization, update the
-  // line below to `return defaultShouldRevalidate` instead.
-  // For more details see: https://remix.run/docs/en/main/route/should-revalidate
-  return false;
+  // Cart updates use `fetcher.submit` to `/cart`, not a document POST. In that case
+  // `formMethod` is not set here, but `defaultShouldRevalidate` is true so the root
+  // loader (and deferred `cart` in the header) can refresh after the action completes.
+  // Returning only `false` leaves `useOptimisticCart` with nothing to merge once the
+  // fetcher is idle, so the cart count badge stays at 0.
+  return defaultShouldRevalidate;
 };
 
 /**

@@ -1,141 +1,101 @@
-import {useLoaderData, Link} from 'react-router';
-import {getPaginationVariables, Image} from '@shopify/hydrogen';
-import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
+import { useLoaderData } from 'react-router';
+import { CollectionSection } from '~/components/CollectionSection';
+import { HomeContactCta } from '~/components/HomeContactCta';
+import { buildSiblingColorDataByProductId } from '~/lib/productGroupColorData';
+import { loadFiveCategorySnippetCollections } from '~/lib/categoryCollectionSnippets.server';
+
+/**
+ * Catalog landing `/collections`: same curated category snippets as homepage.
+ *
+ * @type {Route.MetaFunction}
+ */
+export const meta = () => {
+  return [{ title: 'Shop by category | Plus 1 Blanks' }];
+};
 
 /**
  * @param {Route.LoaderArgs} args
  */
 export async function loader(args) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+  const { context } = args;
+  const snippetBundles =
+    await loadFiveCategorySnippetCollections(context.storefront);
+  const productSiblingColorData = await buildSiblingColorDataByProductId(
+    context.storefront,
+    snippetBundles.sectionProductsForSiblingColors,
+  );
 
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
-
-  return {...deferredData, ...criticalData};
+  return {
+    tshirtsCollection: snippetBundles.tshirtsCollection,
+    sweatshirtsCollection: snippetBundles.sweatshirtsCollection,
+    longSleeveTshirtsCollection: snippetBundles.longSleeveTshirtsCollection,
+    polosCollection: snippetBundles.polosCollection,
+    hatsCollection: snippetBundles.hatsCollection,
+    productSiblingColorData,
+  };
 }
 
-/**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
- * @param {Route.LoaderArgs}
- */
-async function loadCriticalData({context, request}) {
-  const paginationVariables = getPaginationVariables(request, {
-    pageBy: 4,
-  });
-
-  const [{collections}] = await Promise.all([
-    context.storefront.query(COLLECTIONS_QUERY, {
-      variables: paginationVariables,
-    }),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
-
-  return {collections};
-}
-
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- * @param {Route.LoaderArgs}
- */
-function loadDeferredData({context}) {
-  return {};
-}
-
-export default function Collections() {
+export default function CollectionsIndex() {
   /** @type {LoaderReturnData} */
-  const {collections} = useLoaderData();
+  const data = useLoaderData();
 
   return (
-    <div className="collections">
-      <h1>Collections</h1>
-      <PaginatedResourceSection
-        connection={collections}
-        resourcesClassName="collections-grid"
-      >
-        {({node: collection, index}) => (
-          <CollectionItem
-            key={collection.id}
-            collection={collection}
-            index={index}
+    <>
+      <div className="collections-index">
+        {/* Same horizontal inset as homepage .collection-section (shared class) */}
+        <header className="collections-index-header collection-section-inset">
+          <h1 id="collections-index-heading" className="home-hero-title">
+            Shop by category
+          </h1>
+          <p className="home-hero-lede">
+            Browse our main collections—same highlights as on the homepage.
+          </p>
+        </header>
+        {data.tshirtsCollection && (
+          <CollectionSection
+            title="T-Shirts"
+            shopAllLabel="Shop All T-Shirts"
+            collection={data.tshirtsCollection}
+            siblingColorDataByProductId={data.productSiblingColorData}
           />
         )}
-      </PaginatedResourceSection>
-    </div>
+        {data.sweatshirtsCollection && (
+          <CollectionSection
+            title="Sweatshirts"
+            shopAllLabel="Shop All Sweatshirts"
+            collection={data.sweatshirtsCollection}
+            siblingColorDataByProductId={data.productSiblingColorData}
+          />
+        )}
+        {data.longSleeveTshirtsCollection && (
+          <CollectionSection
+            title="Long Sleeve T-Shirts"
+            shopAllLabel="Shop All Longsleeves"
+            collection={data.longSleeveTshirtsCollection}
+            siblingColorDataByProductId={data.productSiblingColorData}
+          />
+        )}
+        {data.polosCollection && (
+          <CollectionSection
+            title="Polos"
+            shopAllLabel="Shop All Polos"
+            collection={data.polosCollection}
+            siblingColorDataByProductId={data.productSiblingColorData}
+          />
+        )}
+        {data.hatsCollection && (
+          <CollectionSection
+            title="Hats"
+            shopAllLabel="Shop All Hats"
+            collection={data.hatsCollection}
+            siblingColorDataByProductId={data.productSiblingColorData}
+          />
+        )}
+      </div>
+      <HomeContactCta />
+    </>
   );
 }
-
-/**
- * @param {{
- *   collection: CollectionFragment;
- *   index: number;
- * }}
- */
-function CollectionItem({collection, index}) {
-  return (
-    <Link
-      className="collection-item"
-      key={collection.id}
-      to={`/collections/${collection.handle}`}
-      prefetch="intent"
-    >
-      {collection?.image && (
-        <Image
-          alt={collection.image.altText || collection.title}
-          aspectRatio="1/1"
-          data={collection.image}
-          loading={index < 3 ? 'eager' : undefined}
-          sizes="(min-width: 45em) 400px, 100vw"
-        />
-      )}
-      <h5>{collection.title}</h5>
-    </Link>
-  );
-}
-
-const COLLECTIONS_QUERY = `#graphql
-  fragment Collection on Collection {
-    id
-    title
-    handle
-    image {
-      id
-      url
-      altText
-      width
-      height
-    }
-  }
-  query StoreCollections(
-    $country: CountryCode
-    $endCursor: String
-    $first: Int
-    $language: LanguageCode
-    $last: Int
-    $startCursor: String
-  ) @inContext(country: $country, language: $language) {
-    collections(
-      first: $first,
-      last: $last,
-      before: $startCursor,
-      after: $endCursor
-    ) {
-      nodes {
-        ...Collection
-      }
-      pageInfo {
-        hasNextPage
-        hasPreviousPage
-        startCursor
-        endCursor
-      }
-    }
-  }
-`;
 
 /** @typedef {import('./+types/collections._index').Route} Route */
-/** @typedef {import('storefrontapi.generated').CollectionFragment} CollectionFragment */
 /** @typedef {import('@shopify/remix-oxygen').SerializeFrom<typeof loader>} LoaderReturnData */

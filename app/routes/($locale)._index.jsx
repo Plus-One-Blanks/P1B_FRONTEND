@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useLoaderData } from 'react-router';
 import { Image, Money } from '@shopify/hydrogen';
+import { HomeContactCta } from '~/components/HomeContactCta';
 import { HomeGlobalShipping } from '~/components/HomeGlobalShipping';
 import { OutlineButton } from '~/components/OutlineButton';
 import { TextIconLink } from '~/components/TextIconLink';
 import { SolidButton } from '~/components/SolidButton';
+import { CollectionSection } from '~/components/CollectionSection';
 import { HomeFeaturedProductCard } from '~/components/HomeFeaturedProductCard';
 import { HomeWorkflowSpotlightProductCard } from '~/components/HomeWorkflowSpotlightProductCard';
 import { HOME_QUALITY_BRANDS } from '~/lib/featuredProductCard';
 import { buildSiblingColorDataByProductId } from '~/lib/productGroupColorData';
+import { loadFiveCategorySnippetCollections } from '~/lib/categoryCollectionSnippets.server';
+import { ALL_PRODUCTS_COLLECTION_HANDLE } from '~/lib/searchDrawerCollection';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -30,38 +34,6 @@ import {
   Gem,
   CircleMinus,
 } from 'lucide-react';
-
-/** Customer inquiries — replace with your team inbox. */
-const CONTACT_MAILTO =
-  'mailto:support@example.com?subject=Product%20inquiry%20%E2%80%94%20Plus%201%20Blanks';
-
-/** Homepage contact CTA collage (grid positions 1–6). */
-const HOME_CONTACT_COLLAGE = [
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO1.jpg?v=1775515866',
-    alt: 'Wholesale apparel and production',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO2.jpg?v=1775515866',
-    alt: 'Blank apparel and fulfillment',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO5.jpg?v=1775515866',
-    alt: 'Decorated apparel',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO4.jpg?v=1775515866',
-    alt: 'Print shop production',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO3.jpg?v=1775515866',
-    alt: 'Team and workspace',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/PHOTO6.png?v=1775515866',
-    alt: 'Branded apparel',
-  },
-];
 
 /** Homepage hero carousel — Shopify Files CDN. */
 const HOME_HERO_SLIDES = [
@@ -122,36 +94,8 @@ export async function loader(args) {
  * @param {Route.LoaderArgs}
  */
 async function loadCriticalData({ context }) {
-  // Query multiple collections for different sections (must match nav /collection URLs)
-  const tshirtsHandle = 't-shirts';
-  const sweatshirtsHandle = 'sweatshirts';
-  const longSleeveTshirtsHandle = 'long-sleeve-t-shirts';
-  const polosHandle = 'polos';
-  const hatsHandle = 'hats';
-
-  const [
-    tshirtsResult,
-    sweatshirtsResult,
-    longSleeveTshirtsResult,
-    polosResult,
-    hatsResult,
-    featuredShowcaseResult,
-  ] = await Promise.all([
-    context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: tshirtsHandle },
-    }),
-    context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: sweatshirtsHandle },
-    }),
-    context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: longSleeveTshirtsHandle },
-    }),
-    context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: polosHandle },
-    }),
-    context.storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: { handle: hatsHandle },
-    }),
+  const [snippetBundles, featuredShowcaseResult] = await Promise.all([
+    loadFiveCategorySnippetCollections(context.storefront),
     context.storefront.query(FEATURED_SHOWCASE_COLLECTION_QUERY, {
       variables: { handle: FEATURED_PRODUCT_COLLECTION_HANDLE },
     }),
@@ -160,24 +104,8 @@ async function loadCriticalData({ context }) {
   const showcaseProducts =
     featuredShowcaseResult?.collection?.products?.nodes ?? [];
 
-  const sectionCollections = [
-    tshirtsResult?.collection,
-    sweatshirtsResult?.collection,
-    longSleeveTshirtsResult?.collection,
-    polosResult?.collection,
-    hatsResult?.collection,
-  ].filter(Boolean);
-
-  const sectionProductsForSiblingColors = [];
-  const seenSectionProductId = new Set();
-  for (const col of sectionCollections) {
-    for (const p of col.products?.nodes ?? []) {
-      if (p?.id && !seenSectionProductId.has(p.id)) {
-        seenSectionProductId.add(p.id);
-        sectionProductsForSiblingColors.push(p);
-      }
-    }
-  }
+  const sectionProductsForSiblingColors =
+    snippetBundles.sectionProductsForSiblingColors;
 
   /** One pass: featured strip + category rows share ProductID / colorCode lookups */
   const productsForSiblingColors = [];
@@ -194,11 +122,12 @@ async function loadCriticalData({ context }) {
   );
 
   return {
-    tshirtsCollection: tshirtsResult?.collection || null,
-    sweatshirtsCollection: sweatshirtsResult?.collection || null,
-    longSleeveTshirtsCollection: longSleeveTshirtsResult?.collection || null,
-    polosCollection: polosResult?.collection || null,
-    hatsCollection: hatsResult?.collection || null,
+    tshirtsCollection: snippetBundles.tshirtsCollection || null,
+    sweatshirtsCollection: snippetBundles.sweatshirtsCollection || null,
+    longSleeveTshirtsCollection:
+      snippetBundles.longSleeveTshirtsCollection || null,
+    polosCollection: snippetBundles.polosCollection || null,
+    hatsCollection: snippetBundles.hatsCollection || null,
     /** Featured Product collection — top 5 manual order, tags/variants for swatches */
     featuredProductShowcase: featuredShowcaseResult?.collection || null,
     /**
@@ -366,7 +295,7 @@ function HomeHero() {
 
           <div className="home-hero-ctas">
             <SolidButton
-              to="/collections/all"
+              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
               prefetch="intent"
               icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
             >
@@ -607,7 +536,7 @@ function HomeWorkflow({ spotlightProduct, spotlightSiblingColor }) {
             </h2>
             <div className="home-workflow-ctas">
               <SolidButton
-                to="/collections/all"
+                to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
                 prefetch="intent"
                 icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
               >
@@ -713,7 +642,7 @@ function HomeQualityBrands() {
               From everyday staples to premium fleece—we carry the brands decorators trust, so you can stock and price with confidence.
             </p>
             <SolidButton
-              to="/collections/all"
+              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
               prefetch="intent"
               icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
             >
@@ -818,7 +747,7 @@ function HomeFeaturedBlanks({ collection, siblingColorData }) {
             </OutlineButton>
           ))}
           <SolidButton
-            to="/collections/all"
+            to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
             prefetch="intent"
             compact
             icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
@@ -953,62 +882,6 @@ function HomeValueProps() {
   );
 }
 
-function HomeContactCta() {
-  return (
-    <section className="home-contact" aria-labelledby="home-contact-heading">
-      <div className="home-contact-wrap">
-        <div className="home-contact-panel">
-          <div className="home-contact-main">
-            <div className="home-contact-copy">
-              <h2 id="home-contact-heading" className="home-contact-title">
-                Don&apos;t see what you&apos;re looking for?
-              </h2>
-              <p className="home-contact-text">
-                Tell us the brand, style, color, or quantity you need—we&apos;ll confirm
-                availability, suggest alternates, or help you plan a larger buy.
-              </p>
-            </div>
-            <div className="home-contact-actions">
-              <SolidButton
-                href={CONTACT_MAILTO}
-                variant="pastel-sky"
-                icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
-              >
-                Email our team
-              </SolidButton>
-            </div>
-          </div>
-          <div className="home-contact-collage">
-            {HOME_CONTACT_COLLAGE.map(({ src, alt }, i) => {
-              const n = i + 1;
-              const imgProps = {
-                className: `home-contact-collage-img home-contact-collage-img--${n}`,
-                src,
-                alt,
-                width: 400,
-                height: 320,
-                loading: 'lazy',
-                decoding: 'async',
-              };
-              if (n === 1 || n === 3) {
-                return (
-                  <div
-                    key={src}
-                    className={`home-contact-collage-tile home-contact-collage-tile--${n}`}
-                  >
-                    <img {...imgProps} />
-                  </div>
-                );
-              }
-              return <img key={src} {...imgProps} />;
-            })}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 const COLLECTION_HERO_FEATURES = [
   {
     Icon: Truck,
@@ -1075,121 +948,6 @@ export function CollectionBanner({ collection }) {
     </div>
   );
 }
-
-/**
- * @param {{
- *   title: string;
- *   shopAllLabel: string;
- *   collection: FeaturedCollectionFragment;
- *   siblingColorDataByProductId?: Record<string, { count: number; swatchHexes: string[] }>;
- * }}
- */
-function CollectionSection({
-  title,
-  shopAllLabel,
-  collection,
-  siblingColorDataByProductId,
-}) {
-  if (!collection) return null;
-
-  const headingId = `collection-section-${collection.handle}`;
-  const products = collection.products?.nodes?.slice(0, 5) ?? [];
-
-  return (
-    <section
-      className="collection-section"
-      aria-labelledby={headingId}
-    >
-      <div className="collection-section-inset">
-        <div className="collection-section-header">
-          <h2 id={headingId} className="collection-section-title">
-            {title}
-          </h2>
-          <div className="collection-section-header-trail">
-            <div className="collection-section-separator" aria-hidden>
-              |
-            </div>
-            <TextIconLink
-              to={`/collections/${collection.handle}`}
-              className="collection-section-shop-link"
-              prefetch="intent"
-            >
-              {shopAllLabel}
-            </TextIconLink>
-          </div>
-        </div>
-        {collection.description ? (
-          <p className="collection-section-description">
-            {collection.description}
-          </p>
-        ) : null}
-        {products.length > 0 ? (
-          <div className="home-featured-grid collection-section-grid">
-            {products.map((product) => (
-              <HomeFeaturedProductCard
-                key={product.id}
-                product={product}
-                siblingColorData={siblingColorDataByProductId?.[product.id]}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="collection-section-empty">No products in this collection.</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
-
-const FEATURED_COLLECTION_QUERY = `#graphql
-  fragment ProductItem on Product {
-    id
-    handle
-    title
-    vendor
-    tags
-    availableForSale
-    description
-    featuredImage {
-      id
-      altText
-      url
-      width
-      height
-    }
-    priceRange {
-      minVariantPrice {
-        amount
-        currencyCode
-      }
-    }
-    options {
-      name
-      values
-    }
-  }
-  fragment FeaturedCollection on Collection {
-    id
-    title
-    description
-    handle
-    products(first: 20, sortKey: MANUAL) {
-      nodes {
-        ...ProductItem
-      }
-    }
-  }
-  query FeaturedCollection(
-    $handle: String!
-    $country: CountryCode
-    $language: LanguageCode
-  ) @inContext(country: $country, language: $language) {
-    collection(handle: $handle) {
-      ...FeaturedCollection
-    }
-  }
-`;
 
 /** Top 5 from the featured collection (manual sort), tags + variants for swatches. */
 const FEATURED_SHOWCASE_COLLECTION_QUERY = `#graphql

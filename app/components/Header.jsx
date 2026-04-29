@@ -468,8 +468,8 @@ function HeaderCtas({ isLoggedIn, cart }) {
 function AccountLink({ isLoggedIn }) {
   return (
     <NavLink
-      prefetch="intent"
-      to={isLoggedIn ? '/account' : '/account/login'}
+      prefetch={isLoggedIn ? 'intent' : false}
+      to={isLoggedIn ? '/account' : '/account/login?redirect=1'}
       className="header-login-link"
       style={activeLinkStyle}
     >
@@ -545,10 +545,31 @@ function CartToggle({ cart }) {
   );
 }
 
+/**
+ * @param {import('storefrontapi.generated').CartApiQueryFragment | null | undefined} cart
+ */
+function quantityFromCartLines(cart) {
+  const nodes = cart?.lines?.nodes;
+  if (!Array.isArray(nodes)) return 0;
+  return nodes.reduce((sum, line) => sum + (Number(line?.quantity) || 0), 0);
+}
+
 function CartBanner() {
   const originalCart = useAsyncValue();
   const cart = useOptimisticCart(originalCart);
-  return <CartBadge count={cart?.totalQuantity ?? 0} />;
+  const tq = cart?.totalQuantity;
+  const fromTotal =
+    typeof tq === 'number' && Number.isFinite(tq) && tq > 0 ? tq : 0;
+  const fromLines = quantityFromCartLines(cart);
+  const fallbackLines = quantityFromCartLines(originalCart);
+  const fallbackTotal =
+    typeof originalCart?.totalQuantity === 'number' &&
+    Number.isFinite(originalCart.totalQuantity) &&
+    originalCart.totalQuantity > 0
+      ? originalCart.totalQuantity
+      : 0;
+  const count = fromTotal || fromLines || fallbackTotal || fallbackLines;
+  return <CartBadge count={count} />;
 }
 
 const FALLBACK_HEADER_MENU = {

@@ -7,6 +7,7 @@ import {
   Phone,
   Youtube,
 } from 'lucide-react';
+import {ALL_PRODUCTS_COLLECTION_HANDLE} from '~/lib/searchDrawerCollection';
 
 /** Business address (footer). */
 const FOOTER_ADDRESS_LINE = '24335 Prielipp Rd Wildomar CA 92595';
@@ -18,7 +19,10 @@ const FOOTER_NAV_COLUMNS = [
   {
     title: 'Catalog',
     links: [
-      {label: 'All Product', to: '/collections/all'},
+      {
+        label: 'All Product',
+        to: `/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`,
+      },
       {label: 'T-Shirts', to: '/collections/t-shirts'},
       {label: 'Longsleeves', to: '/collections/long-sleeve-t-shirts'},
       {label: 'Sweatshirts', to: '/collections/sweatshirts'},

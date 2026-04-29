@@ -2,7 +2,7 @@ import {extractProductGroupTag} from '~/lib/productGroupColorData';
 
 /**
  * Storefront collection handle for the catalog the search drawer loads and filters.
- * Default `all` matches Shopify’s “All products” collection and `/collections/all`.
+ * Default `all-products` matches the Storefront collection; `/collections/all` redirects here.
  * Change this if your catalog lives under a different collection handle.
  */
 export const ALL_PRODUCTS_COLLECTION_HANDLE = 'all-products';
