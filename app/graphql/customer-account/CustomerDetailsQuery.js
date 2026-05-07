@@ -2,7 +2,7 @@
 export const CUSTOMER_FRAGMENT = `#graphql
   fragment Customer on Customer {
     id
-    createdAt
+    creationDate
     firstName
     lastName
     emailAddress {

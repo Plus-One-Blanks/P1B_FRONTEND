@@ -128,7 +128,7 @@ function orderPath(orderId, previewQuery) {
 }
 
 /**
- * @typedef {{customer: import('customer-accountapi.generated').CustomerDetailsQuery['customer'] & {createdAt?: string | null} | null}} AccountOutletContext
+ * @typedef {{customer: import('customer-accountapi.generated').CustomerDetailsQuery['customer'] | null}} AccountOutletContext
  */
 export default function AccountDashboard() {
   /** @type {{preview: boolean; recentOrders: {nodes: import('customer-accountapi.generated').OrderItemFragment[]}; previewQuery: string}} */
@@ -137,8 +137,8 @@ export default function AccountDashboard() {
   const { customer } = useOutletContext();
   const nodes = recentOrders?.nodes ?? [];
 
-  const memberDate = customer?.createdAt
-    ? new Date(customer.createdAt).toLocaleDateString(undefined, {
+  const memberDate = customer?.creationDate
+    ? new Date(customer.creationDate).toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',

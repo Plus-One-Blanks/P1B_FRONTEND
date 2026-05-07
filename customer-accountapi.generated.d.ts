@@ -71,7 +71,7 @@ export type CustomerAddressCreateMutation = {
 
 export type CustomerFragment = Pick<
   CustomerAccountAPI.Customer,
-  'id' | 'createdAt' | 'firstName' | 'lastName'
+  'id' | 'creationDate' | 'firstName' | 'lastName'
 > & {
   emailAddress?: CustomerAccountAPI.Maybe<
     Pick<CustomerAccountAPI.CustomerEmailAddress, 'emailAddress'>
@@ -140,7 +140,7 @@ export type CustomerDetailsQueryVariables = CustomerAccountAPI.Exact<{
 export type CustomerDetailsQuery = {
   customer: Pick<
     CustomerAccountAPI.Customer,
-    'id' | 'createdAt' | 'firstName' | 'lastName'
+    'id' | 'creationDate' | 'firstName' | 'lastName'
   > & {
     emailAddress?: CustomerAccountAPI.Maybe<
       Pick<CustomerAccountAPI.CustomerEmailAddress, 'emailAddress'>
@@ -516,7 +516,7 @@ export type CustomerUpdateMutation = {
 };
 
 interface GeneratedQueryTypes {
-  '#graphql\n  query CustomerDetails($language: LanguageCode) @inContext(language: $language) {\n    customer {\n      ...Customer\n    }\n  }\n  #graphql\n  fragment Customer on Customer {\n    id\n    createdAt\n    firstName\n    lastName\n    emailAddress {\n      emailAddress\n    }\n    phoneNumber {\n      phoneNumber\n    }\n    defaultAddress {\n      ...Address\n    }\n    addresses(first: 6) {\n      nodes {\n        ...Address\n      }\n    }\n  }\n  fragment Address on CustomerAddress {\n    id\n    formatted\n    firstName\n    lastName\n    company\n    address1\n    address2\n    territoryCode\n    zoneCode\n    city\n    zip\n    phoneNumber\n  }\n\n': {
+  '#graphql\n  query CustomerDetails($language: LanguageCode) @inContext(language: $language) {\n    customer {\n      ...Customer\n    }\n  }\n  #graphql\n  fragment Customer on Customer {\n    id\n    creationDate\n    firstName\n    lastName\n    emailAddress {\n      emailAddress\n    }\n    phoneNumber {\n      phoneNumber\n    }\n    defaultAddress {\n      ...Address\n    }\n    addresses(first: 6) {\n      nodes {\n        ...Address\n      }\n    }\n  }\n  fragment Address on CustomerAddress {\n    id\n    formatted\n    firstName\n    lastName\n    company\n    address1\n    address2\n    territoryCode\n    zoneCode\n    city\n    zip\n    phoneNumber\n  }\n\n': {
     return: CustomerDetailsQuery;
     variables: CustomerDetailsQueryVariables;
   };

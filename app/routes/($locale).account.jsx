@@ -36,7 +36,7 @@ function isDevPreview(request, context) {
 function buildMockCustomer() {
   return {
     id: 'gid://shopify/Customer/preview',
-    createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
+    creationDate: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
     firstName: 'Preview',
     lastName: 'Customer',
     emailAddress: {emailAddress: 'preview.customer@example.com'},
