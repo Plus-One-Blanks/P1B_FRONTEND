@@ -470,6 +470,7 @@ function AccountLink({ isLoggedIn }) {
     <NavLink
       prefetch={isLoggedIn ? 'intent' : false}
       to={isLoggedIn ? '/account' : '/account/login?redirect=1'}
+      reloadDocument={!isLoggedIn}
       className="header-login-link"
       style={activeLinkStyle}
     >

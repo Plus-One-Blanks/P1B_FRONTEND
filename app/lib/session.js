@@ -30,12 +30,17 @@ export class AppSession {
    * @param {string[]} secrets
    */
   static async init(request, secrets) {
+    const protocol = new URL(request.url).protocol;
+    const isHttps = protocol === 'https:';
+
     const storage = createCookieSessionStorage({
       cookie: {
         name: 'session',
         httpOnly: true,
         path: '/',
         sameSite: 'lax',
+        // Oxygen/prod HTTPS: without `secure`, browsers may mishandle persistence for some flows.
+        secure: isHttps,
         secrets,
       },
     });

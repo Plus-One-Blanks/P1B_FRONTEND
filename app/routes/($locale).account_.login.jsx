@@ -1,14 +1,50 @@
-import { Link, useLoaderData } from 'react-router';
+import { Link, redirect, useLoaderData } from 'react-router';
 import logo from '~/assets/logo.svg';
+
+/**
+ * Optional Oxygen env: canonical storefront origin for Customer Account OAuth.
+ * Set to exactly what you configured in Shopify (e.g. `https://www.plusoneblanks.com`).
+ * Fixes `redirect_uri` / cookie mismatches when users land on apex vs www.
+ *
+ * @param {string | undefined} raw
+ * @returns {string | undefined} Normalized origin, e.g. `https://www.example.com`
+ */
+function parseCanonicalCustomerAccountOrigin(raw) {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  try {
+    const withScheme = trimmed.includes('://') ? trimmed : `https://${trimmed}`;
+    const u = new URL(withScheme);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * @param {Route.LoaderArgs}
  */
 export async function loader({ request, context }) {
+  const env = context.env || {};
+  const canonicalCustomerAccountOrigin = parseCanonicalCustomerAccountOrigin(
+    env.PUBLIC_CUSTOMER_ACCOUNT_ORIGIN,
+  );
   const url = new URL(request.url);
+  let requestOrigin =
+    url.protocol === 'http:' ? url.origin.replace(/^http:/, 'https:') : url.origin;
+
+  if (
+    canonicalCustomerAccountOrigin &&
+    requestOrigin.replace(/\/$/, '') !==
+      canonicalCustomerAccountOrigin.replace(/\/$/, '')
+  ) {
+    const nextUrl = `${canonicalCustomerAccountOrigin}${url.pathname}${url.search}`;
+    return redirect(nextUrl);
+  }
+
   // Only redirect to Shopify customer account when user has clicked Continue
   if (url.searchParams.get('redirect') === '1') {
-    const env = context.env || {};
     const shopId = env.SHOP_ID;
     const clientId = env.PUBLIC_CUSTOMER_ACCOUNT_API_CLIENT_ID;
     if (!shopId || !clientId) {
@@ -18,9 +54,9 @@ export async function loader({ request, context }) {
       countryCode: context.storefront.i18n.country,
     });
   }
-  const requestUrl = new URL(request.url);
-  const origin = requestUrl.protocol === 'http:' ? requestUrl.origin.replace('http', 'https') : requestUrl.origin;
-  const callbackUrl = `${origin}/account/authorize`;
+  const displayOrigin =
+    canonicalCustomerAccountOrigin ?? requestOrigin;
+  const callbackUrl = `${displayOrigin.replace(/\/$/, '')}/account/authorize`;
   return { callbackUrl };
 }
 
@@ -87,7 +123,13 @@ export default function Login() {
             <strong className="login-callback-url">{callbackUrl}</strong>
           </p>
           <p className="login-callback-where">
-            In Shopify Admin: <strong>Sales channels → Headless</strong> (or your Hydrogen app) → <strong>Customer Account API</strong> → Application setup → <strong>Callback URL(s)</strong>. Add the URL above and save. Use HTTPS (localhost is not allowed; use a tunnel like ngrok for local dev).
+            In Shopify Admin: <strong>Sales channels → Headless</strong> (or your Hydrogen app) →{' '}
+            <strong>Hydrogen / Customer Account API</strong> → Application setup →{' '}
+            <strong>Callback URL(s)</strong> and matching <strong>Javascript origin(s)</strong>.{' '}
+            The URL above must match the address bar hostname exactly (including <code>www</code>).{' '}
+            If shoppers can open both apex and www, register both origins and callbacks—or set{' '}
+            <code>PUBLIC_CUSTOMER_ACCOUNT_ORIGIN</code> on Oxygen so OAuth always runs on one host.{' '}
+            Use HTTPS for production (localhost is not allowed unless you tunnel with ngrok for local dev).
           </p>
         </details>
       </div>
