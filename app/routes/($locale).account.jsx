@@ -8,6 +8,10 @@ import {
 } from 'react-router';
 import {LayoutGrid, LogOut, MapPin, Package, User} from 'lucide-react';
 import {CUSTOMER_DETAILS_QUERY} from '~/graphql/customer-account/CustomerDetailsQuery';
+import {
+  guardCustomerAccountAuth,
+  serializeCustomerAccountErrors,
+} from '~/lib/customerAccountAuth';
 
 export function shouldRevalidate() {
   return true;
@@ -90,7 +94,11 @@ export async function loader({ request, context }) {
     );
   }
 
-  context.customerAccount.handleAuthStatus();
+  const authRedirect = await guardCustomerAccountAuth(customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
+
   const { data, errors } = await customerAccount.query(CUSTOMER_DETAILS_QUERY, {
     variables: {
       language: customerAccount.i18n.language,
@@ -100,7 +108,7 @@ export async function loader({ request, context }) {
   if (errors?.length || !data?.customer) {
     console.error('[account layout loader] CUSTOMER_DETAILS_QUERY failed', {
       hasCustomer: Boolean(data?.customer),
-      errors,
+      errors: serializeCustomerAccountErrors(errors),
     });
     // Avoid hard-500 loops in production if the customer session can't be resolved.
     // This most often happens when the customer auth cookie/session is invalid for the current host.

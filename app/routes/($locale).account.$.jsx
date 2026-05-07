@@ -1,11 +1,15 @@
 import {redirect} from 'react-router';
+import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
 
 // fallback wild card for all unauthenticated routes in account section
 /**
  * @param {Route.LoaderArgs}
  */
 export async function loader({context}) {
-  context.customerAccount.handleAuthStatus();
+  const authRedirect = await guardCustomerAccountAuth(context.customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
 
   return redirect('/account');
 }

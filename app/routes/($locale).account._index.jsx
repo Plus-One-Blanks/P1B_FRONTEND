@@ -4,6 +4,10 @@ import { Money, getPaginationVariables } from '@shopify/hydrogen';
 import { CUSTOMER_ORDERS_QUERY } from '~/graphql/customer-account/CustomerOrdersQuery';
 import { SolidButton } from '~/components/SolidButton';
 import { ALL_PRODUCTS_COLLECTION_HANDLE } from '~/lib/searchDrawerCollection';
+import {
+  guardCustomerAccountAuth,
+  serializeCustomerAccountErrors,
+} from '~/lib/customerAccountAuth';
 import {toBase64} from '~/lib/base64';
 
 /**
@@ -79,7 +83,11 @@ export async function loader({ request, context }) {
   }
 
   const { customerAccount } = context;
-  context.customerAccount.handleAuthStatus();
+
+  const authRedirect = await guardCustomerAccountAuth(customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
 
   const paginationVariables = getPaginationVariables(request, {
     pageBy: DASHBOARD_ORDERS_LIMIT,
@@ -96,7 +104,7 @@ export async function loader({ request, context }) {
   if (errors?.length || !data?.customer) {
     console.error('[account dashboard loader] CUSTOMER_ORDERS_QUERY failed', {
       hasCustomer: Boolean(data?.customer),
-      errors,
+      errors: serializeCustomerAccountErrors(errors),
     });
     return redirect('/account/login');
   }

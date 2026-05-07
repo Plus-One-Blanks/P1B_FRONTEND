@@ -1,4 +1,5 @@
 import {CUSTOMER_UPDATE_MUTATION} from '~/graphql/customer-account/CustomerUpdateMutation';
+import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
 import {
   data,
   Form,
@@ -20,7 +21,10 @@ export const meta = () => {
  * @param {Route.LoaderArgs}
  */
 export async function loader({context}) {
-  context.customerAccount.handleAuthStatus();
+  const authRedirect = await guardCustomerAccountAuth(context.customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
 
   return {};
 }

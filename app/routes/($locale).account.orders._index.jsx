@@ -21,6 +21,7 @@ import {CUSTOMER_ORDERS_QUERY} from '~/graphql/customer-account/CustomerOrdersQu
 import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
 import {SolidButton} from '~/components/SolidButton';
 import {toBase64} from '~/lib/base64';
+import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
 
 /** @param {{nodes?: unknown[]}} connection */
 function filterOrdersByBucket(connection, bucket) {
@@ -137,6 +138,12 @@ export const meta = () => {
  */
 export async function loader({request, context}) {
   const {customerAccount} = context;
+
+  const authRedirect = await guardCustomerAccountAuth(customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
+
   const paginationVariables = getPaginationVariables(request, {
     pageBy: 20,
   });

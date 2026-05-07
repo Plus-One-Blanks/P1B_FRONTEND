@@ -2,6 +2,7 @@ import {redirect, useLoaderData} from 'react-router';
 import {Money, Image} from '@shopify/hydrogen';
 import {CUSTOMER_ORDER_QUERY} from '~/graphql/customer-account/CustomerOrderQuery';
 import {fromBase64} from '~/lib/base64';
+import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
 
 /**
  * @type {Route.MetaFunction}
@@ -117,6 +118,11 @@ export async function loader({params, request, context}) {
       fulfillmentStatus,
       preview: true,
     };
+  }
+
+  const authRedirect = await guardCustomerAccountAuth(customerAccount);
+  if (authRedirect) {
+    return authRedirect;
   }
 
   const {data, errors} = await customerAccount.query(CUSTOMER_ORDER_QUERY, {

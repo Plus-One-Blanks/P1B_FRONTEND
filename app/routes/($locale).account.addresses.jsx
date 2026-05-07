@@ -11,6 +11,7 @@ import {
   DELETE_ADDRESS_MUTATION,
   CREATE_ADDRESS_MUTATION,
 } from '~/graphql/customer-account/CustomerAddressMutations';
+import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
 
 /**
  * @type {Route.MetaFunction}
@@ -23,7 +24,10 @@ export const meta = () => {
  * @param {Route.LoaderArgs}
  */
 export async function loader({context}) {
-  context.customerAccount.handleAuthStatus();
+  const authRedirect = await guardCustomerAccountAuth(context.customerAccount);
+  if (authRedirect) {
+    return authRedirect;
+  }
 
   return {};
 }
