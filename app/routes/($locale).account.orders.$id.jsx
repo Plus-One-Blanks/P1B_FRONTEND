@@ -12,13 +12,112 @@ export const meta = ({data}) => {
 /**
  * @param {Route.LoaderArgs}
  */
-export async function loader({params, context}) {
+export async function loader({params, request, context}) {
   const {customerAccount} = context;
   if (!params.id) {
     return redirect('/account/orders');
   }
 
+  const url = new URL(request.url);
+  const previewParam = url.searchParams.get('preview');
+  const runtimeNodeEnv =
+    typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
+  const envNodeEnv = context?.env?.NODE_ENV;
+  const isDev = envNodeEnv !== 'production' && runtimeNodeEnv !== 'production';
+  const isPreviewRequested =
+    previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
+  const isPreview = Boolean(isDev && isPreviewRequested);
+
   const orderId = atob(params.id);
+
+  if (isPreview) {
+    const mkMoney = (amount) => ({amount: String(amount), currencyCode: 'USD'});
+
+    const order = {
+      id: orderId,
+      name: `#${orderId.includes('1001') ? '1001' : orderId.includes('1002') ? '1002' : '1003'}`,
+      confirmationNumber: 'P1B-PREVIEW',
+      statusPageUrl: 'https://example.com',
+      fulfillmentStatus: 'FULFILLED',
+      processedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      fulfillments: {nodes: [{status: 'DELIVERED'}]},
+      totalTax: mkMoney('12.40'),
+      totalPrice: mkMoney('186.40'),
+      subtotal: mkMoney('174.00'),
+      shippingAddress: {
+        name: 'Preview Customer',
+        formatted: 'Preview Customer\n123 Brand St\nLos Angeles CA 90001\nUnited States',
+        formattedArea: 'Los Angeles CA 90001',
+      },
+      discountApplications: {
+        nodes: [
+          {
+            value: {
+              __typename: 'PricingPercentageValue',
+              percentage: 10,
+            },
+          },
+        ],
+      },
+      lineItems: {
+        nodes: [
+          {
+            id: 'gid://shopify/LineItem/preview-1',
+            title: 'Classic Tee',
+            quantity: 2,
+            price: mkMoney('32.00'),
+            discountAllocations: [],
+            totalDiscount: mkMoney('0.00'),
+            image: {
+              altText: 'Classic Tee',
+              height: 800,
+              width: 800,
+              id: 'gid://shopify/Image/preview-1',
+              url: 'https://cdn.shopify.com/s/files/1/0000/0001/files/placeholder.png',
+            },
+            variantTitle: 'Black / M',
+          },
+          {
+            id: 'gid://shopify/LineItem/preview-2',
+            title: 'Heavyweight Hoodie',
+            quantity: 1,
+            price: mkMoney('110.00'),
+            discountAllocations: [],
+            totalDiscount: mkMoney('0.00'),
+            image: {
+              altText: 'Heavyweight Hoodie',
+              height: 800,
+              width: 800,
+              id: 'gid://shopify/Image/preview-2',
+              url: 'https://cdn.shopify.com/s/files/1/0000/0001/files/placeholder.png',
+            },
+            variantTitle: 'Heather / L',
+          },
+        ],
+      },
+    };
+
+    const lineItems = order.lineItems.nodes;
+    const discountApplications = order.discountApplications.nodes;
+    const fulfillmentStatus = order.fulfillments.nodes[0]?.status ?? 'N/A';
+    const firstDiscount = discountApplications[0]?.value;
+    const discountValue =
+      firstDiscount?.__typename === 'MoneyV2' ? firstDiscount : null;
+    const discountPercentage =
+      firstDiscount?.__typename === 'PricingPercentageValue'
+        ? firstDiscount.percentage
+        : null;
+
+    return {
+      order,
+      lineItems,
+      discountValue,
+      discountPercentage,
+      fulfillmentStatus,
+      preview: true,
+    };
+  }
+
   const {data, errors} = await customerAccount.query(CUSTOMER_ORDER_QUERY, {
     variables: {
       orderId,
@@ -73,15 +172,21 @@ export default function OrderRoute() {
     fulfillmentStatus,
   } = useLoaderData();
   return (
-    <div className="account-order">
-      <h2>Order {order.name}</h2>
-      <p>Placed on {new Date(order.processedAt).toDateString()}</p>
-      {order.confirmationNumber && (
-        <p>Confirmation: {order.confirmationNumber}</p>
-      )}
-      <br />
-      <div>
-        <table>
+    <div className="account-section">
+      <div className="account-section-header">
+        <h2 className="account-section-title">Order {order.name}</h2>
+        <p className="account-section-subtitle">
+          Placed on {new Date(order.processedAt).toDateString()}
+          {order.confirmationNumber
+            ? ` · Confirmation ${order.confirmationNumber}`
+            : ''}
+        </p>
+      </div>
+
+      <div className="account-card">
+        <div className="account-order-details-grid">
+          <div className="account-order-table-wrap">
+            <table className="account-table">
           <thead>
             <tr>
               <th scope="col">Product</th>
@@ -101,12 +206,9 @@ export default function OrderRoute() {
               discountPercentage) && (
               <tr>
                 <th scope="row" colSpan={3}>
-                  <p>Discounts</p>
+                  Discounts
                 </th>
-                <th scope="row">
-                  <p>Discounts</p>
-                </th>
-                <td>
+                <td className="account-table-amount">
                   {discountPercentage ? (
                     <span>-{discountPercentage}% OFF</span>
                   ) : (
@@ -117,12 +219,9 @@ export default function OrderRoute() {
             )}
             <tr>
               <th scope="row" colSpan={3}>
-                <p>Subtotal</p>
+                Subtotal
               </th>
-              <th scope="row">
-                <p>Subtotal</p>
-              </th>
-              <td>
+              <td className="account-table-amount">
                 <Money data={order.subtotal} />
               </td>
             </tr>
@@ -130,10 +229,7 @@ export default function OrderRoute() {
               <th scope="row" colSpan={3}>
                 Tax
               </th>
-              <th scope="row">
-                <p>Tax</p>
-              </th>
-              <td>
+              <td className="account-table-amount">
                 <Money data={order.totalTax} />
               </td>
             </tr>
@@ -141,46 +237,54 @@ export default function OrderRoute() {
               <th scope="row" colSpan={3}>
                 Total
               </th>
-              <th scope="row">
-                <p>Total</p>
-              </th>
-              <td>
+              <td className="account-table-amount account-table-amount-strong">
                 <Money data={order.totalPrice} />
               </td>
             </tr>
           </tfoot>
-        </table>
-        <div>
-          <h3>Shipping Address</h3>
-          {order?.shippingAddress ? (
-            <address>
-              <p>{order.shippingAddress.name}</p>
-              {order.shippingAddress.formatted ? (
-                <p>{order.shippingAddress.formatted}</p>
-              ) : (
-                ''
-              )}
-              {order.shippingAddress.formattedArea ? (
-                <p>{order.shippingAddress.formattedArea}</p>
-              ) : (
-                ''
-              )}
-            </address>
-          ) : (
-            <p>No shipping address defined</p>
-          )}
-          <h3>Status</h3>
-          <div>
-            <p>{fulfillmentStatus}</p>
+            </table>
           </div>
+
+          <aside className="account-order-side">
+            <div className="account-card account-card-nested">
+              <h3 className="account-card-title">Shipping address</h3>
+              {order?.shippingAddress ? (
+                <address className="account-address-block">
+                  <p className="account-address-name">
+                    {order.shippingAddress.name}
+                  </p>
+                  {order.shippingAddress.formatted ? (
+                    <p>{order.shippingAddress.formatted}</p>
+                  ) : null}
+                  {order.shippingAddress.formattedArea ? (
+                    <p>{order.shippingAddress.formattedArea}</p>
+                  ) : null}
+                </address>
+              ) : (
+                <p className="account-muted">No shipping address defined.</p>
+              )}
+            </div>
+
+            <div className="account-card account-card-nested">
+              <h3 className="account-card-title">Status</h3>
+              <p>
+                <span className="account-pill">{fulfillmentStatus}</span>
+              </p>
+            </div>
+          </aside>
         </div>
       </div>
-      <br />
-      <p>
-        <a target="_blank" href={order.statusPageUrl} rel="noreferrer">
-          View Order Status →
+
+      <div className="account-section-footer">
+        <a
+          className="account-link"
+          target="_blank"
+          href={order.statusPageUrl}
+          rel="noreferrer"
+        >
+          View order status →
         </a>
-      </p>
+      </div>
     </div>
   );
 }
@@ -192,15 +296,17 @@ function OrderLineRow({lineItem}) {
   return (
     <tr key={lineItem.id}>
       <td>
-        <div>
+        <div className="account-order-line">
           {lineItem?.image && (
-            <div>
+            <div className="account-order-line-image">
               <Image data={lineItem.image} width={96} height={96} />
             </div>
           )}
-          <div>
-            <p>{lineItem.title}</p>
-            <small>{lineItem.variantTitle}</small>
+          <div className="account-order-line-text">
+            <p className="account-order-line-title">{lineItem.title}</p>
+            {lineItem.variantTitle ? (
+              <small className="account-muted">{lineItem.variantTitle}</small>
+            ) : null}
           </div>
         </div>
       </td>
