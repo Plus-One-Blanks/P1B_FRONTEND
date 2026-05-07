@@ -97,6 +97,10 @@ export async function loader({ request, context }) {
   });
 
   if (errors?.length || !data?.customer) {
+    console.error('[account layout loader] CUSTOMER_DETAILS_QUERY failed', {
+      hasCustomer: Boolean(data?.customer),
+      errors,
+    });
     throw new Error('Customer not found');
   }
 

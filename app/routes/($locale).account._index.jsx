@@ -94,6 +94,10 @@ export async function loader({ request, context }) {
   });
 
   if (errors?.length || !data?.customer) {
+    console.error('[account dashboard loader] CUSTOMER_ORDERS_QUERY failed', {
+      hasCustomer: Boolean(data?.customer),
+      errors,
+    });
     throw new Error('Could not load account dashboard');
   }
 

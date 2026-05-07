@@ -89,6 +89,17 @@ export async function loader(args) {
   const criticalData = await loadCriticalData(args);
 
   const {storefront, env} = args.context;
+  const checkoutDomain = env.PUBLIC_CHECKOUT_DOMAIN;
+
+  if (!checkoutDomain) {
+    console.error(
+      [
+        '[root loader] Missing env.PUBLIC_CHECKOUT_DOMAIN.',
+        'This breaks Analytics consent and can cause hydration errors.',
+        'Set it to your checkout domain (typically `your-store.myshopify.com`).',
+      ].join(' '),
+    );
+  }
 
   return {
     ...deferredData,
@@ -98,14 +109,16 @@ export async function loader(args) {
       storefront,
       publicStorefrontId: env.PUBLIC_STOREFRONT_ID,
     }),
-    consent: {
-      checkoutDomain: env.PUBLIC_CHECKOUT_DOMAIN,
-      storefrontAccessToken: env.PUBLIC_STOREFRONT_API_TOKEN,
-      withPrivacyBanner: false,
-      // localize the privacy banner
-      country: args.context.storefront.i18n.country,
-      language: args.context.storefront.i18n.language,
-    },
+    consent: checkoutDomain
+      ? {
+          checkoutDomain,
+          storefrontAccessToken: env.PUBLIC_STOREFRONT_API_TOKEN,
+          withPrivacyBanner: false,
+          // localize the privacy banner
+          country: args.context.storefront.i18n.country,
+          language: args.context.storefront.i18n.language,
+        }
+      : null,
   };
 }
 
@@ -201,6 +214,16 @@ export default function App() {
 
   if (!data) {
     return <KeyedRootOutlet />;
+  }
+
+  // If analytics consent can't be built, render the app without analytics.
+  // (Missing checkout domain is a deployment/config issue, not a page-level fatal error.)
+  if (!data.consent?.checkoutDomain) {
+    return (
+      <PageLayout {...data}>
+        <KeyedRootOutlet />
+      </PageLayout>
+    );
   }
 
   return (

@@ -22,6 +22,15 @@ export default async function handleRequest(
       checkoutDomain: context.env.PUBLIC_CHECKOUT_DOMAIN,
       storeDomain: context.env.PUBLIC_STORE_DOMAIN,
     },
+    // Allow Google Fonts stylesheet + font files.
+    // Without this, the browser blocks Montserrat and you see CSP console errors.
+    styleSrc: [
+      "'self'",
+      "'unsafe-inline'",
+      'https://cdn.shopify.com',
+      'https://fonts.googleapis.com',
+    ],
+    fontSrc: ["'self'", 'https://cdn.shopify.com', 'https://fonts.gstatic.com', 'data:'],
     // Without img-src, images fall back to default-src (Shopify + self only). Third-party map:
     imgSrc: [
       "'self'",
