@@ -3,6 +3,7 @@ import {
   Form,
   NavLink,
   Outlet,
+  redirect,
   useLoaderData,
 } from 'react-router';
 import {LayoutGrid, LogOut, MapPin, Package, User} from 'lucide-react';
@@ -101,7 +102,9 @@ export async function loader({ request, context }) {
       hasCustomer: Boolean(data?.customer),
       errors,
     });
-    throw new Error('Customer not found');
+    // Avoid hard-500 loops in production if the customer session can't be resolved.
+    // This most often happens when the customer auth cookie/session is invalid for the current host.
+    return redirect('/account/login');
   }
 
   return remixData(

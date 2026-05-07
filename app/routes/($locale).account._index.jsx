@@ -1,4 +1,4 @@
-import { Link, useLoaderData, useOutletContext } from 'react-router';
+import { Link, redirect, useLoaderData, useOutletContext } from 'react-router';
 import { ArrowRight, Image, LayoutGrid, Shirt } from 'lucide-react';
 import { Money, getPaginationVariables } from '@shopify/hydrogen';
 import { CUSTOMER_ORDERS_QUERY } from '~/graphql/customer-account/CustomerOrdersQuery';
@@ -98,7 +98,7 @@ export async function loader({ request, context }) {
       hasCustomer: Boolean(data?.customer),
       errors,
     });
-    throw new Error('Could not load account dashboard');
+    return redirect('/account/login');
   }
 
   const allNodes = data.customer.orders?.nodes ?? [];
