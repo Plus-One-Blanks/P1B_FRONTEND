@@ -20,6 +20,7 @@ import {
 import {CUSTOMER_ORDERS_QUERY} from '~/graphql/customer-account/CustomerOrdersQuery';
 import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
 import {SolidButton} from '~/components/SolidButton';
+import {toBase64} from '~/lib/base64';
 
 /** @param {{nodes?: unknown[]}} connection */
 function filterOrdersByBucket(connection, bucket) {
@@ -468,7 +469,7 @@ function OrderSearchForm({currentFilters}) {
 function OrderItem({order, preview, onViewOrder}) {
   const fulfillmentStatus = flattenConnection(order.fulfillments)[0]?.status;
   const previewSearch = preview ? '?preview=1' : '';
-  const orderPath = `/account/orders/${btoa(order.id)}${previewSearch}`;
+  const orderPath = `/account/orders/${toBase64(order.id)}${previewSearch}`;
   return (
     <article className="account-order-card">
       <div className="account-order-main">

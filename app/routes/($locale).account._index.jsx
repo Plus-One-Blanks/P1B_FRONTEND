@@ -4,6 +4,7 @@ import { Money, getPaginationVariables } from '@shopify/hydrogen';
 import { CUSTOMER_ORDERS_QUERY } from '~/graphql/customer-account/CustomerOrdersQuery';
 import { SolidButton } from '~/components/SolidButton';
 import { ALL_PRODUCTS_COLLECTION_HANDLE } from '~/lib/searchDrawerCollection';
+import {toBase64} from '~/lib/base64';
 
 /**
  * @type {Route.MetaFunction}
@@ -111,11 +112,7 @@ export async function loader({ request, context }) {
  * @param {string} previewQuery
  */
 function orderPath(orderId, previewQuery) {
-  const id =
-    typeof btoa !== 'undefined'
-      ? btoa(orderId)
-      : Buffer.from(orderId, 'utf-8').toString('base64');
-  return `/account/orders/${id}${previewQuery}`;
+  return `/account/orders/${toBase64(orderId)}${previewQuery}`;
 }
 
 /**

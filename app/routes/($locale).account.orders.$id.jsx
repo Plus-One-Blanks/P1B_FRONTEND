@@ -1,6 +1,7 @@
 import {redirect, useLoaderData} from 'react-router';
 import {Money, Image} from '@shopify/hydrogen';
 import {CUSTOMER_ORDER_QUERY} from '~/graphql/customer-account/CustomerOrderQuery';
+import {fromBase64} from '~/lib/base64';
 
 /**
  * @type {Route.MetaFunction}
@@ -28,7 +29,7 @@ export async function loader({params, request, context}) {
     previewParam === '1' || previewParam === 'true' || previewParam === 'yes';
   const isPreview = Boolean(isDev && isPreviewRequested);
 
-  const orderId = atob(params.id);
+  const orderId = fromBase64(params.id);
 
   if (isPreview) {
     const mkMoney = (amount) => ({amount: String(amount), currencyCode: 'USD'});
