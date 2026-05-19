@@ -29,6 +29,8 @@
   /* Account layout: fixed sidebar width + nav card height on desktop */
   --account-sidebar-width: 260px;
   --account-nav-height-desktop: 500px;
+  /* Header: hamburger + centered logo below this width; full nav row above */
+  --header-nav-breakpoint: 1550px;
 }
 
 @media (max-width: 1440px) {
@@ -43,11 +45,17 @@
   }
 }
 
-@media (max-width: 45em) {
+@media (max-width: 1550px) {
   :root {
     --collection-page-inline: 1.25rem;
-    /* Smaller logo on mobile — sit under header without a scroll gap */
-    --collection-filter-sticky-top: calc(1rem + 58px);
+    /* Compact header — filters sit under shorter centered logo row */
+    --collection-filter-sticky-top: calc(0.65rem + 48px);
+  }
+}
+
+@media (max-width: 48em) {
+  :root {
+    --collection-page-inline: 1.25rem;
   }
 }
 
@@ -75,7 +83,7 @@ img {
 * components/Aside
 * --------------------------------------------------
 */
-@media (max-width: 45em) {
+@media (max-width: 1550px) {
   html:has(.overlay.expanded) {
     overflow: hidden;
   }
@@ -335,12 +343,18 @@ button.reset:hover:not(:has(> *)) {
   gap: 15px;
 }
 
-.header-top-left {
+.header-top-brand {
   flex: 1;
   display: flex;
   align-items: center;
   gap: 15px;
   min-width: 0;
+}
+
+.header-top-start,
+.header-top-end {
+  display: flex;
+  align-items: center;
 }
 
 .header-logo-link {
@@ -399,7 +413,7 @@ button.reset:hover:not(:has(> *)) {
   padding: 0 0.5rem;
 }
 
-@media (min-width: 48em) {
+@media (min-width: 1551px) {
   .header-nav-tabs {
     display: flex;
   }
@@ -442,10 +456,8 @@ button.reset:hover:not(:has(> *)) {
   background-color: #e5e7eb;
 }
 
-.header-top-right {
+.header-top-end {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
   gap: 1.5rem;
 }
 
@@ -551,6 +563,11 @@ button.reset:hover:not(:has(> *)) {
 
 .header-get-in-touch {
   white-space: nowrap;
+}
+
+.header-account-icon {
+  display: none;
+  text-decoration: none;
 }
 
 .header-account-link {
@@ -790,7 +807,11 @@ button.reset:hover:not(:has(> *)) {
 }
 
 .header-menu-mobile-toggle {
-  @media (min-width: 48em) {
+  flex-shrink: 0;
+}
+
+@media (min-width: 1551px) {
+  .header-top-start {
     display: none;
   }
 }
@@ -798,25 +819,119 @@ button.reset:hover:not(:has(> *)) {
 .header-menu-mobile {
   display: flex;
   flex-direction: column;
-  grid-gap: 1.5rem;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
-/* Mobile Responsive */
-@media (max-width: 45em) {
+.header-menu-mobile > a {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0a0a0a;
+  text-decoration: none;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid #e5e7eb;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.header-menu-mobile > a:hover {
+  color: #0a0a0a;
+  text-decoration: none;
+  background-color: rgba(243, 244, 246, 0.6);
+}
+
+.header-menu-mobile > a:focus-visible {
+  outline: 2px solid #0a0a0a;
+  outline-offset: 2px;
+}
+
+.header-menu-mobile .header-menu-item::after {
+  display: none;
+}
+
+aside main:has(.header-menu-mobile) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.5rem 1.25rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.header-menu-mobile-cta {
+  margin-top: 0.75rem;
+  padding-top: 1rem !important;
+  border-top: 2px solid #0a0a0a !important;
+  border-bottom: none !important;
+  text-align: center;
+  font-weight: 700 !important;
+}
+
+/* Compact header: hamburger | centered logo | search + cart + account icon */
+@media (max-width: 1550px) {
   .header-top {
-    padding: 1rem;
-    flex-wrap: wrap;
-    gap: 1rem;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 0.65rem 1.25rem 0;
+    gap: 0.5rem;
   }
 
-  .header-top-center {
-    order: 3;
-    width: 100%;
-    max-width: none;
+  .header-top-start {
+    justify-self: start;
+    min-width: 2.75rem;
   }
 
-  .header-top-right {
-    gap: 1rem;
+  .header-top-brand {
+    grid-column: 2;
+    flex: none;
+    justify-content: center;
+    min-width: 0;
+    gap: 0;
+  }
+
+  .header-logo-link {
+    align-items: center;
+  }
+
+  .header-nav-tabs {
+    display: none;
+  }
+
+  .header-top-end {
+    grid-column: 3;
+    justify-self: end;
+    min-width: 2.75rem;
+  }
+
+  .header-ctas {
+    flex-wrap: nowrap;
+    gap: 0.15rem 0.25rem;
+  }
+
+  .header-login-link,
+  .header-get-in-touch {
+    display: none;
+  }
+
+  .header-account-icon {
+    display: inline-flex;
+  }
+
+  .header-logo {
+    height: auto;
+    min-height: 0;
+  }
+
+  .logo-image {
+    height: 48px;
+    transform: translateY(0);
   }
 
   .header-rewards {
@@ -829,10 +944,6 @@ button.reset:hover:not(:has(> *)) {
 
   .header-menu-desktop {
     display: none;
-  }
-
-  .logo-image {
-    height: 50px;
   }
 
   .header-tagline {

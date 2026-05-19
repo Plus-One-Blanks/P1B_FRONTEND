@@ -118,18 +118,17 @@ function SearchAside({header}) {
  * }}
  */
 function MobileMenuAside({header, publicStoreDomain}) {
+  if (!header?.shop) return null;
+
   return (
-    header.menu &&
-    header.shop.primaryDomain?.url && (
-      <Aside type="mobile" heading="MENU">
-        <HeaderMenu
-          menu={header.menu}
-          viewport="mobile"
-          primaryDomainUrl={header.shop.primaryDomain.url}
-          publicStoreDomain={publicStoreDomain}
-        />
-      </Aside>
-    )
+    <Aside type="mobile" heading="Menu">
+      <HeaderMenu
+        menu={header.menu}
+        viewport="mobile"
+        primaryDomainUrl={header.shop.primaryDomain?.url ?? ''}
+        publicStoreDomain={publicStoreDomain}
+      />
+    </Aside>
   );
 }
 

@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Await, Link, NavLink, useAsyncValue } from 'react-router';
 import { useAnalytics, useOptimisticCart } from '@shopify/hydrogen';
-import { Search } from 'lucide-react';
+import { Menu, Search, User } from 'lucide-react';
 import { useAside } from '~/components/Aside';
 import { SolidButton } from '~/components/SolidButton';
 import logo from '~/assets/logo.svg';
@@ -43,7 +43,10 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
         className={`header${isScrolled ? ' header--scrolled' : ''}`}
       >
         <div className="header-top">
-          <div className="header-top-left">
+          <div className="header-top-start">
+            <HeaderMenuMobileToggle />
+          </div>
+          <div className="header-top-brand">
             <NavLink prefetch="intent" to="/" style={activeLinkStyle} end className="header-logo-link">
               <div className="header-logo">
                 <img src={logo} alt={shop.name} className="logo-image" />
@@ -52,7 +55,7 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
             <HeaderNavTabs />
           </div>
 
-          <div className="header-top-right">
+          <div className="header-top-end">
             <HeaderCtas isLoggedIn={isLoggedIn} cart={cart} />
           </div>
         </div>
@@ -143,7 +146,12 @@ export function HeaderMenu({
   const { close } = useAside();
 
   return (
-    <nav className={className} role="navigation">
+    <nav
+      id="primary-mobile-nav"
+      className={className}
+      role="navigation"
+      aria-label="Shop categories"
+    >
       {viewport === 'mobile' && (
         <NavLink
           end
@@ -168,6 +176,15 @@ export function HeaderMenu({
           {item.title}
         </NavLink>
       ))}
+      {viewport === 'mobile' && (
+        <a
+          href={HEADER_GET_IN_TOUCH_MAILTO}
+          className="header-menu-mobile-cta"
+          onClick={close}
+        >
+          Get in Touch
+        </a>
+      )}
     </nav>
   );
 }
@@ -448,9 +465,9 @@ function HeaderCtas({ isLoggedIn, cart }) {
     <nav className="header-ctas" role="navigation" aria-label="Account and utilities">
       <HeaderSearchToggle />
       <CartToggle cart={cart} />
-      <Suspense fallback={<AccountLink isLoggedIn={false} />}>
-        <Await resolve={isLoggedIn} errorElement={<AccountLink isLoggedIn={false} />}>
-          {(loggedIn) => <AccountLink isLoggedIn={loggedIn} />}
+      <Suspense fallback={<AccountControls isLoggedIn={false} />}>
+        <Await resolve={isLoggedIn} errorElement={<AccountControls isLoggedIn={false} />}>
+          {(loggedIn) => <AccountControls isLoggedIn={loggedIn} />}
         </Await>
       </Suspense>
       <SolidButton
@@ -460,33 +477,52 @@ function HeaderCtas({ isLoggedIn, cart }) {
       >
         Get in Touch
       </SolidButton>
-      <HeaderMenuMobileToggle />
     </nav>
   );
 }
 
-function AccountLink({ isLoggedIn }) {
+function AccountControls({ isLoggedIn }) {
+  const accountPath = isLoggedIn ? '/account' : '/account/login?redirect=1';
+  const accountLabel = isLoggedIn ? 'My account' : 'Log in';
+
   return (
-    <NavLink
-      prefetch={isLoggedIn ? 'intent' : false}
-      to={isLoggedIn ? '/account' : '/account/login?redirect=1'}
-      reloadDocument={!isLoggedIn}
-      className="header-login-link"
-      style={activeLinkStyle}
-    >
-      {isLoggedIn ? 'Account' : 'Login'}
-    </NavLink>
+    <>
+      <NavLink
+        prefetch={isLoggedIn ? 'intent' : false}
+        to={accountPath}
+        reloadDocument={!isLoggedIn}
+        className="header-icon-btn header-account-icon"
+        aria-label={accountLabel}
+      >
+        <User size={22} strokeWidth={2} aria-hidden />
+      </NavLink>
+      <NavLink
+        prefetch={isLoggedIn ? 'intent' : false}
+        to={accountPath}
+        reloadDocument={!isLoggedIn}
+        className="header-login-link"
+        style={activeLinkStyle}
+      >
+        {isLoggedIn ? 'Account' : 'Login'}
+      </NavLink>
+    </>
   );
 }
 
 function HeaderMenuMobileToggle() {
-  const { open } = useAside();
+  const { open, type, close } = useAside();
+  const menuOpen = type === 'mobile';
+
   return (
     <button
-      className="header-menu-mobile-toggle reset"
-      onClick={() => open('mobile')}
+      type="button"
+      className="header-menu-mobile-toggle header-icon-btn reset"
+      onClick={() => (menuOpen ? close() : open('mobile'))}
+      aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+      aria-expanded={menuOpen}
+      aria-controls="primary-mobile-nav"
     >
-      <h3>☰</h3>
+      <Menu size={22} strokeWidth={2} aria-hidden />
     </button>
   );
 }
