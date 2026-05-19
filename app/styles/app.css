@@ -912,7 +912,13 @@ aside main:has(.header-menu-mobile) {
 
   .header-ctas {
     flex-wrap: nowrap;
-    gap: 0.15rem 0.25rem;
+    gap: 0.25rem 0.4rem;
+  }
+
+  .header-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.65rem;
   }
 
   .header-login-link,
@@ -948,6 +954,22 @@ aside main:has(.header-menu-mobile) {
 
   .header-tagline {
     font-size: 0.6875rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .header-top {
+    padding-inline: 0.75rem;
+  }
+
+  .header-ctas {
+    gap: 0.15rem;
+  }
+
+  .header-icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0.55rem;
   }
 }
 
@@ -4740,6 +4762,28 @@ form.search-drawer-form.predictive-search-form {
   min-width: 1.5rem;
 }
 
+@media (max-width: 768px), (hover: none) {
+  .home-hero-dots {
+    gap: 0.1rem;
+    padding: 0;
+  }
+
+  .home-hero-dot {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 17px;
+    background-clip: content-box;
+  }
+
+  .home-hero-dot-active {
+    width: 44px;
+    min-width: 44px;
+    padding-inline: 10px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-hero-dot {
     transition: background 0.2s ease;
@@ -6704,9 +6748,9 @@ form.search-drawer-form.predictive-search-form {
   justify-content: center;
 
   @media (max-width: 768px) {
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
   }
 }
 
@@ -7735,7 +7779,7 @@ form.search-drawer-form.predictive-search-form {
 
   @media (max-width: 768px) {
     padding: 0 1.5rem;
-    grid-gap: 2rem;
+    grid-gap: 1.25rem;
     grid-template-columns: 1fr;
     display: flex;
     flex-direction: column;
@@ -7778,7 +7822,7 @@ form.search-drawer-form.predictive-search-form {
     font-size: 1.5rem;
     line-height: 1.3;
     order: 1;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
   }
 }
 
@@ -7801,7 +7845,7 @@ form.search-drawer-form.predictive-search-form {
 
   @media (max-width: 768px) {
     gap: 1.5rem;
-    order: 1;
+    display: contents;
   }
 }
 
@@ -7815,7 +7859,7 @@ form.search-drawer-form.predictive-search-form {
   max-width: 100%;
 
   @media (max-width: 768px) {
-    order: 1;
+    order: 3;
   }
 }
 
@@ -7894,8 +7938,8 @@ form.search-drawer-form.predictive-search-form {
   padding: 0;
 
   @media (max-width: 768px) {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -7940,7 +7984,17 @@ form.search-drawer-form.predictive-search-form {
   min-width: 0;
 
   @media (max-width: 768px) {
-    order: 2;
+    display: contents;
+  }
+}
+
+.product-form {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+
+  @media (max-width: 768px) {
+    order: 5;
   }
 }
 
@@ -8242,7 +8296,7 @@ form.search-drawer-form.predictive-search-form {
 
   @media (max-width: 768px) {
     grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
-    gap: 0.375rem;
+    gap: 0.5rem;
   }
 }
 
@@ -8351,9 +8405,10 @@ form.search-drawer-form.predictive-search-form {
   }
 
   @media (max-width: 768px) {
-    max-width: 38px;
-    height: 38px;
-    font-size: 0.8125rem;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    font-size: 0.875rem;
   }
 }
 
@@ -8695,8 +8750,8 @@ form.search-drawer-form.predictive-search-form {
   .product-pricing-boxes {
     flex-direction: row;
     gap: 0.75rem;
-    margin: 1.5rem 0;
-    order: 3;
+    margin: 0;
+    order: 2;
   }
 
   .pricing-box {
@@ -11042,7 +11097,7 @@ main:has(> .account-page) {
   @media (max-width: 768px) {
     padding: 0.75rem;
     border-radius: 6px;
-    order: 6;
+    order: 7;
   }
 }
 
@@ -11278,7 +11333,7 @@ main:has(> .account-page) {
   }
 
   @media (max-width: 768px) {
-    order: 7;
+    order: 6;
   }
 }
 
