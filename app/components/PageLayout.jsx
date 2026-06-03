@@ -1,8 +1,9 @@
-import {Await, useFetcher, useLocation} from 'react-router';
+import {Await, Link, useFetcher, useLocation} from 'react-router';
 import {Suspense, useEffect, useLayoutEffect, useRef} from 'react';
 import {Aside, useAside} from '~/components/Aside';
 import {Footer} from '~/components/Footer';
 import {Header, HeaderMenu} from '~/components/Header';
+import logo from '~/assets/logo.svg';
 import {CartMain} from '~/components/CartMain';
 import {SearchDrawer} from '~/components/SearchDrawer';
 
@@ -60,7 +61,11 @@ function CloseAsideOnLocationChange() {
       if (type !== 'closed') {
         close();
       }
-      document.body.classList.remove('cart-open', 'search-drawer-open');
+      document.body.classList.remove(
+        'cart-open',
+        'search-drawer-open',
+        'mobile-menu-open',
+      );
       lastPathname.current = pathname;
     }
   }, [pathname, type, close]);
@@ -117,11 +122,33 @@ function SearchAside({header}) {
  *   publicStoreDomain: PageLayoutProps['publicStoreDomain'];
  * }}
  */
+function MobileMenuLogo({shopName}) {
+  const {close} = useAside();
+  return (
+    <Link
+      to="/"
+      prefetch="intent"
+      className="header-logo-link"
+      onClick={close}
+    >
+      <div className="header-logo">
+        <img src={logo} alt={shopName} className="logo-image" decoding="async" />
+      </div>
+    </Link>
+  );
+}
+
 function MobileMenuAside({header, publicStoreDomain}) {
   if (!header?.shop) return null;
 
+  const shopName = header.shop.name ?? 'Plus 1 Blanks';
+
   return (
-    <Aside type="mobile" heading="Menu">
+    <Aside
+      type="mobile"
+      placement="left"
+      heading={<MobileMenuLogo shopName={shopName} />}
+    >
       <HeaderMenu
         menu={header.menu}
         viewport="mobile"

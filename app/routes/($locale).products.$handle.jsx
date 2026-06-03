@@ -1159,7 +1159,7 @@ function ColorSwatchSelectorWithPreload({ colors, selectedColor, onColorSelect }
   }, [colors]);
 
   return (
-    <div className="product-color-swatches" style={{ marginBottom: '1rem' }}>
+    <div className="product-color-swatches">
       <div className="color-swatch-selector">
         <div className="color-swatches">
           {colors.map((color) => (

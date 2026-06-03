@@ -7,6 +7,7 @@ import {
   useRef,
   useCallback,
 } from 'react';
+import { SlidersHorizontal } from 'lucide-react';
 
 /**
  * @typedef {{ type: string; label: string; value: string }} ActiveFilter
@@ -42,6 +43,45 @@ function productText(product) {
   const tags = Array.isArray(product.tags) ? product.tags.join(' ').toLowerCase() : '';
   const desc = (product.description || '').toLowerCase();
   return `${title} ${tags} ${desc}`;
+}
+
+/**
+ * @param {{
+ *   title: string;
+ *   active?: boolean;
+ *   open: boolean;
+ *   onToggle: () => void;
+ *   children: import('react').ReactNode;
+ * }}
+ */
+function MobileFilterSection({ title, active, open, onToggle, children }) {
+  return (
+    <div
+      className={[
+        'collection-filter-sheet-section',
+        open && 'collection-filter-sheet-section--open',
+        active && 'collection-filter-sheet-section--active',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <button
+        type="button"
+        className="collection-filter-sheet-section-toggle"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="collection-filter-sheet-section-title">{title}</span>
+        {active ? (
+          <span className="collection-filter-sheet-section-active-dot" aria-hidden />
+        ) : null}
+        <ChevronIcon open={open} />
+      </button>
+      {open ? (
+        <div className="collection-filter-sheet-section-body">{children}</div>
+      ) : null}
+    </div>
+  );
 }
 
 function ChevronIcon({ open }) {
@@ -86,10 +126,28 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
   const [openMenu, setOpenMenu] = useState(
     /** @type {null | 'brand' | 'material' | 'fabric' | 'color' | 'price' | 'sort'} */ (null)
   );
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileSection, setMobileSection] = useState(
+    /** @type {null | 'brand' | 'material' | 'fabric' | 'color' | 'price'} */ (null),
+  );
 
   const barRef = useRef(null);
 
   const closeMenu = useCallback(() => setOpenMenu(null), []);
+
+  const closeMobileFilters = useCallback(() => {
+    setMobileFiltersOpen(false);
+    setMobileSection(null);
+  }, []);
+
+  const openMobileFilters = useCallback(() => {
+    closeMenu();
+    setMobileFiltersOpen(true);
+  }, [closeMenu]);
+
+  const toggleMobileSection = useCallback((id) => {
+    setMobileSection((prev) => (prev === id ? null : id));
+  }, []);
 
   useEffect(() => {
     const isInsideChrome = (/** @type {EventTarget | null} */ target) => {
@@ -173,8 +231,26 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
       setSelectedFabrics([]);
       setSelectedColors([]);
       closeMenu();
+      closeMobileFilters();
     },
   }));
+
+  useEffect(() => {
+    if (!mobileFiltersOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') closeMobileFilters();
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileFiltersOpen, closeMobileFilters]);
 
   useEffect(() => {
     onActiveFiltersChange?.(activeFiltersList);
@@ -606,9 +682,338 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
       .filter(Boolean)
       .join(' ');
 
+  const activeFilterCount = activeFiltersList.length;
+
+  const handleClearAllMobile = () => {
+    setSelectedBrands([]);
+    setMinPrice('');
+    setMaxPrice('');
+    setSelectedMaterials([]);
+    setSelectedFabrics([]);
+    setSelectedColors([]);
+    closeMenu();
+    closeMobileFilters();
+  };
+
+  const pricePanel = pricePanelUnavailable ? (
+    <p className="collection-filter-price-empty">
+      No products match your current filters.
+    </p>
+  ) : (
+    <div className="collection-filter-price-panel">
+      <div className="collection-price-dual-slider">
+        <div className="collection-price-dual-slider-inner">
+          <div className="collection-price-dual-slider-track" aria-hidden />
+          <div
+            className="collection-price-dual-slider-active"
+            style={{
+              left: `${pctLow}%`,
+              width: `${Math.max(0, pctHigh - pctLow)}%`,
+            }}
+            aria-hidden
+          />
+          <input
+            type="range"
+            className="collection-price-dual-slider-input collection-price-dual-slider-input--low"
+            style={{ zIndex: priceLowThumbZ }}
+            min={dMin}
+            max={dMax}
+            step={priceStep}
+            value={displayLow}
+            onChange={(e) => handlePriceSliderLow(e.target.value)}
+            aria-label="Minimum price"
+          />
+          <input
+            type="range"
+            className="collection-price-dual-slider-input collection-price-dual-slider-input--high"
+            style={{ zIndex: priceHighThumbZ }}
+            min={dMin}
+            max={dMax}
+            step={priceStep}
+            value={displayHigh}
+            onChange={(e) => handlePriceSliderHigh(e.target.value)}
+            aria-label="Maximum price"
+          />
+        </div>
+      </div>
+      <div className="collection-filter-price-boxes">
+        <label className="collection-filter-price-box">
+          <span className="collection-filter-price-box-label">Minimum</span>
+          <input
+            type="number"
+            className="collection-filter-price-box-input"
+            min={dMin}
+            max={displayHigh}
+            step={priceStep}
+            value={minPrice === '' ? displayLow : minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            onBlur={() => {
+              const s = String(minPrice).trim();
+              if (s === '') {
+                setMinPrice('');
+                return;
+              }
+              const raw = parseFloat(s.replace(/,/g, ''));
+              if (!Number.isFinite(raw)) {
+                setMinPrice('');
+                return;
+              }
+              const c = Math.max(dMin, Math.min(displayHigh - priceStep, raw));
+              commitPriceRange(c, displayHigh);
+            }}
+          />
+        </label>
+        <span className="collection-filter-price-box-sep" aria-hidden>
+          -
+        </span>
+        <label className="collection-filter-price-box">
+          <span className="collection-filter-price-box-label">Maximum</span>
+          <input
+            type="number"
+            className="collection-filter-price-box-input"
+            min={displayLow}
+            max={dMax}
+            step={priceStep}
+            value={maxPrice === '' ? displayHigh : maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            onBlur={() => {
+              const s = String(maxPrice).trim();
+              if (s === '') {
+                setMaxPrice('');
+                return;
+              }
+              const raw = parseFloat(s.replace(/,/g, ''));
+              if (!Number.isFinite(raw)) {
+                setMaxPrice('');
+                return;
+              }
+              const c = Math.min(dMax, Math.max(displayLow + priceStep, raw));
+              commitPriceRange(displayLow, c);
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+
   return (
     <div className="collection-filter-bar" ref={barRef}>
-      <div className="collection-filter-bar-inner">
+      <div className="collection-filter-mobile-bar">
+        <button
+          type="button"
+          className="collection-filter-mobile-trigger"
+          onClick={openMobileFilters}
+          aria-expanded={mobileFiltersOpen}
+          aria-haspopup="dialog"
+        >
+          <SlidersHorizontal size={18} strokeWidth={2} aria-hidden />
+          <span>Filters</span>
+          {activeFilterCount > 0 ? (
+            <span className="collection-filter-mobile-trigger-badge" aria-label={`${activeFilterCount} active filters`}>
+              {activeFilterCount}
+            </span>
+          ) : null}
+        </button>
+        <div className="collection-filter-mobile-sort">
+          <div className="collection-filter-pill-wrap collection-filter-pill-wrap--sort">
+            <button
+              type="button"
+              className={pillClass(sortBy !== 'featured')}
+              aria-expanded={openMenu === 'sort'}
+              onClick={() => toggleMenu('sort')}
+            >
+              Sort
+              <ChevronIcon open={openMenu === 'sort'} />
+            </button>
+            {openMenu === 'sort' && (
+              <div className="collection-filter-dropdown collection-filter-dropdown--sort">
+                {SORT_OPTIONS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`collection-filter-sort-option ${sortBy === value ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      setSortBy(value);
+                      closeMenu();
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <span className="collection-filter-item-count collection-filter-item-count--mobile" aria-live="polite">
+          {itemCount} item{itemCount !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {mobileFiltersOpen ? (
+        <div
+          className="collection-filter-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="collection-filter-sheet-title"
+        >
+          <button
+            type="button"
+            className="collection-filter-sheet-backdrop"
+            onClick={closeMobileFilters}
+            aria-label="Close filters"
+          />
+          <div className="collection-filter-sheet-panel">
+            <header className="collection-filter-sheet-header">
+              <h2 id="collection-filter-sheet-title">Filters</h2>
+              <button
+                type="button"
+                className="collection-filter-sheet-close reset"
+                onClick={closeMobileFilters}
+                aria-label="Close filters"
+              >
+                ×
+              </button>
+            </header>
+            <div className="collection-filter-sheet-scroll">
+              <MobileFilterSection
+                title="Brand"
+                active={selectedBrands.length > 0}
+                open={mobileSection === 'brand'}
+                onToggle={() => toggleMobileSection('brand')}
+              >
+                {brandOptions.map(({ name, count }) => (
+                  <label key={name} className="collection-filter-dropdown-row">
+                    <span
+                      className="collection-filter-swatch collection-filter-swatch--neutral"
+                      aria-hidden
+                    />
+                    <span className="collection-filter-dropdown-label">{name}</span>
+                    <span className="collection-filter-dropdown-count">{count}</span>
+                    <input
+                      type="checkbox"
+                      className="collection-filter-dropdown-check"
+                      checked={selectedBrands.includes(name)}
+                      onChange={() => handleBrandToggle(name)}
+                    />
+                  </label>
+                ))}
+              </MobileFilterSection>
+
+              {materials.length > 0 ? (
+                <MobileFilterSection
+                  title="Material"
+                  active={selectedMaterials.length > 0}
+                  open={mobileSection === 'material'}
+                  onToggle={() => toggleMobileSection('material')}
+                >
+                  {materialOptions.map(({ name, count }) => (
+                    <label key={name} className="collection-filter-dropdown-row">
+                      <span
+                        className="collection-filter-swatch collection-filter-swatch--neutral"
+                        aria-hidden
+                      />
+                      <span className="collection-filter-dropdown-label">{name}</span>
+                      <span className="collection-filter-dropdown-count">{count}</span>
+                      <input
+                        type="checkbox"
+                        className="collection-filter-dropdown-check"
+                        checked={selectedMaterials.includes(name)}
+                        onChange={() => handleMaterialToggle(name)}
+                      />
+                    </label>
+                  ))}
+                </MobileFilterSection>
+              ) : null}
+
+              <MobileFilterSection
+                title="Color"
+                active={selectedColors.length > 0}
+                open={mobileSection === 'color'}
+                onToggle={() => toggleMobileSection('color')}
+              >
+                {colorOptions.map(({ label, hex, count }) => (
+                  <label
+                    key={label}
+                    className={`collection-filter-dropdown-row ${count === 0 ? 'is-disabled' : ''}`}
+                  >
+                    <span
+                      className="collection-filter-swatch"
+                      style={{ backgroundColor: hex }}
+                      aria-hidden
+                    />
+                    <span className="collection-filter-dropdown-label">{label}</span>
+                    <span className="collection-filter-dropdown-count">{count}</span>
+                    <input
+                      type="checkbox"
+                      className="collection-filter-dropdown-check"
+                      checked={selectedColors.includes(label)}
+                      disabled={count === 0}
+                      onChange={() => handleColorToggle(label)}
+                    />
+                  </label>
+                ))}
+              </MobileFilterSection>
+
+              <MobileFilterSection
+                title="Fabric"
+                active={selectedFabrics.length > 0}
+                open={mobileSection === 'fabric'}
+                onToggle={() => toggleMobileSection('fabric')}
+              >
+                {fabrics.map(({ name, count }) => (
+                  <label
+                    key={name}
+                    className={`collection-filter-dropdown-row ${count === 0 ? 'is-disabled' : ''}`}
+                  >
+                    <span
+                      className="collection-filter-swatch collection-filter-swatch--neutral"
+                      aria-hidden
+                    />
+                    <span className="collection-filter-dropdown-label">{name}</span>
+                    <span className="collection-filter-dropdown-count">{count}</span>
+                    <input
+                      type="checkbox"
+                      className="collection-filter-dropdown-check"
+                      checked={selectedFabrics.includes(name)}
+                      disabled={count === 0}
+                      onChange={() => handleFabricToggle(name)}
+                    />
+                  </label>
+                ))}
+              </MobileFilterSection>
+
+              <MobileFilterSection
+                title="Price"
+                active={Boolean(minPrice || maxPrice)}
+                open={mobileSection === 'price'}
+                onToggle={() => toggleMobileSection('price')}
+              >
+                <div className="collection-filter-sheet-price">{pricePanel}</div>
+              </MobileFilterSection>
+            </div>
+            <footer className="collection-filter-sheet-footer">
+              {activeFilterCount > 0 ? (
+                <button
+                  type="button"
+                  className="collection-filter-sheet-clear"
+                  onClick={handleClearAllMobile}
+                >
+                  Clear all
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="collection-filter-sheet-apply solid-button solid-button--compact"
+                onClick={closeMobileFilters}
+              >
+                View {itemCount} item{itemCount !== 1 ? 's' : ''}
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="collection-filter-bar-inner collection-filter-bar-inner--desktop">
         <div className="collection-filter-bar-pills" role="toolbar" aria-label="Filter products">
           {/* Brand */}
           <div className="collection-filter-pill-wrap">
@@ -767,134 +1172,7 @@ export const CollectionFilters = forwardRef(function CollectionFilters(
             </button>
             {openMenu === 'price' && (
               <div className="collection-filter-dropdown collection-filter-dropdown--price">
-                {pricePanelUnavailable ? (
-                  <p className="collection-filter-price-empty">
-                    No products match your current filters.
-                  </p>
-                ) : (
-                  <div className="collection-filter-price-panel">
-                    <div className="collection-price-dual-slider">
-                      <div className="collection-price-dual-slider-inner">
-                        <div
-                          className="collection-price-dual-slider-track"
-                          aria-hidden
-                        />
-                        <div
-                          className="collection-price-dual-slider-active"
-                          style={{
-                            left: `${pctLow}%`,
-                            width: `${Math.max(0, pctHigh - pctLow)}%`,
-                          }}
-                          aria-hidden
-                        />
-                        <input
-                          type="range"
-                          className="collection-price-dual-slider-input collection-price-dual-slider-input--low"
-                          style={{ zIndex: priceLowThumbZ }}
-                          min={dMin}
-                          max={dMax}
-                          step={priceStep}
-                          value={displayLow}
-                          onChange={(e) =>
-                            handlePriceSliderLow(e.target.value)
-                          }
-                          aria-label="Minimum price"
-                        />
-                        <input
-                          type="range"
-                          className="collection-price-dual-slider-input collection-price-dual-slider-input--high"
-                          style={{ zIndex: priceHighThumbZ }}
-                          min={dMin}
-                          max={dMax}
-                          step={priceStep}
-                          value={displayHigh}
-                          onChange={(e) =>
-                            handlePriceSliderHigh(e.target.value)
-                          }
-                          aria-label="Maximum price"
-                        />
-                      </div>
-                    </div>
-                    <div className="collection-filter-price-boxes">
-                      <label className="collection-filter-price-box">
-                        <span className="collection-filter-price-box-label">
-                          Minimum
-                        </span>
-                        <input
-                          type="number"
-                          className="collection-filter-price-box-input"
-                          min={dMin}
-                          max={displayHigh}
-                          step={priceStep}
-                          value={
-                            minPrice === ''
-                              ? displayLow
-                              : minPrice
-                          }
-                          onChange={(e) => setMinPrice(e.target.value)}
-                          onBlur={() => {
-                            const s = String(minPrice).trim();
-                            if (s === '') {
-                              setMinPrice('');
-                              return;
-                            }
-                            const raw = parseFloat(s.replace(/,/g, ''));
-                            if (!Number.isFinite(raw)) {
-                              setMinPrice('');
-                              return;
-                            }
-                            const c = Math.max(
-                              dMin,
-                              Math.min(displayHigh - priceStep, raw),
-                            );
-                            commitPriceRange(c, displayHigh);
-                          }}
-                        />
-                      </label>
-                      <span
-                        className="collection-filter-price-box-sep"
-                        aria-hidden
-                      >
-                        -
-                      </span>
-                      <label className="collection-filter-price-box">
-                        <span className="collection-filter-price-box-label">
-                          Maximum
-                        </span>
-                        <input
-                          type="number"
-                          className="collection-filter-price-box-input"
-                          min={displayLow}
-                          max={dMax}
-                          step={priceStep}
-                          value={
-                            maxPrice === ''
-                              ? displayHigh
-                              : maxPrice
-                          }
-                          onChange={(e) => setMaxPrice(e.target.value)}
-                          onBlur={() => {
-                            const s = String(maxPrice).trim();
-                            if (s === '') {
-                              setMaxPrice('');
-                              return;
-                            }
-                            const raw = parseFloat(s.replace(/,/g, ''));
-                            if (!Number.isFinite(raw)) {
-                              setMaxPrice('');
-                              return;
-                            }
-                            const c = Math.min(
-                              dMax,
-                              Math.max(displayLow + priceStep, raw),
-                            );
-                            commitPriceRange(displayLow, c);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
+                {pricePanel}
               </div>
             )}
           </div>

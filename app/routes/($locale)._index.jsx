@@ -735,25 +735,40 @@ function HomeFeaturedBlanks({ collection, siblingColorData }) {
           </p>
         </header>
         <nav className="home-featured-pills" aria-label="Browse categories">
-          {pills.map((p) => (
-            <OutlineButton
-              key={p.to}
-              to={p.to}
+          <div className="home-featured-pills-row">
+            {pills.slice(0, 3).map((p) => (
+              <OutlineButton
+                key={p.to}
+                to={p.to}
+                prefetch="intent"
+                compact
+                icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
+              >
+                {p.label}
+              </OutlineButton>
+            ))}
+          </div>
+          <div className="home-featured-pills-row">
+            {pills.slice(3).map((p) => (
+              <OutlineButton
+                key={p.to}
+                to={p.to}
+                prefetch="intent"
+                compact
+                icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
+              >
+                {p.label}
+              </OutlineButton>
+            ))}
+            <SolidButton
+              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
               prefetch="intent"
               compact
               icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
             >
-              {p.label}
-            </OutlineButton>
-          ))}
-          <SolidButton
-            to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
-            prefetch="intent"
-            compact
-            icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
-          >
-            Browse full catalog
-          </SolidButton>
+              Browse full catalog
+            </SolidButton>
+          </div>
         </nav>
       </div>
       <div className="home-featured-grid-bleed">

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Image, Money } from '@shopify/hydrogen';
 import { useVariantUrl } from '~/lib/variants';
@@ -7,6 +8,25 @@ import {
   isLightSwatchHex,
   resolveBrandLogoFromVendorAndTags,
 } from '~/lib/featuredProductCard';
+
+const DEFAULT_MAX_SWATCH_DOTS = 8;
+
+/** @param {string} query */
+function useMatchMedia(query) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+
+  return matches;
+}
 
 /**
  * @param {{
@@ -23,12 +43,14 @@ import {
  *   };
  *   siblingColorData?: { count: number; swatchHexes: string[] };
  *   imageLoading?: 'eager' | 'lazy';
+ *   swatchLimitNarrow?: number;
  * }}
  */
 export function HomeFeaturedProductCard({
   product,
   siblingColorData,
   imageLoading = 'lazy',
+  swatchLimitNarrow,
 }) {
   const variantUrl = useVariantUrl(product.handle);
   const image = product.featuredImage;
@@ -43,7 +65,11 @@ export function HomeFeaturedProductCard({
     typeof siblingColorData?.count === 'number' && siblingColorData.count > 0
       ? siblingColorData.count
       : colorValues.length;
-  const maxDots = 8;
+  const isNarrowViewport = useMatchMedia('(max-width: 1024px)');
+  const maxDots =
+    swatchLimitNarrow != null && isNarrowViewport
+      ? swatchLimitNarrow
+      : DEFAULT_MAX_SWATCH_DOTS;
   const shown = Array.from({ length: Math.min(maxDots, colorCount) });
   const overflow = Math.max(0, colorCount - maxDots);
 

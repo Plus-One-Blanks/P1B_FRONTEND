@@ -176,6 +176,7 @@ export default function Collection() {
                       key={product.id}
                       product={product}
                       siblingColorData={collectionSiblingColorData?.[product.id]}
+                      swatchLimitNarrow={7}
                       imageLoading={index < 8 ? 'eager' : 'lazy'}
                     />
                   ))}

@@ -145,13 +145,8 @@ export function HeaderMenu({
   const className = `header-menu-${viewport}`;
   const { close } = useAside();
 
-  return (
-    <nav
-      id="primary-mobile-nav"
-      className={className}
-      role="navigation"
-      aria-label="Shop categories"
-    >
+  const links = (
+    <>
       {viewport === 'mobile' && (
         <NavLink
           end
@@ -176,15 +171,41 @@ export function HeaderMenu({
           {item.title}
         </NavLink>
       ))}
-      {viewport === 'mobile' && (
-        <a
-          href={HEADER_GET_IN_TOUCH_MAILTO}
-          className="header-menu-mobile-cta"
-          onClick={close}
+    </>
+  );
+
+  if (viewport === 'mobile') {
+    return (
+      <div className="header-menu-mobile-shell">
+        <nav
+          id="primary-mobile-nav"
+          className={className}
+          role="navigation"
+          aria-label="Shop categories"
         >
-          Get in Touch
-        </a>
-      )}
+          {links}
+        </nav>
+        <div className="header-menu-mobile-footer">
+          <SolidButton
+            href={HEADER_GET_IN_TOUCH_MAILTO}
+            className="header-menu-mobile-cta"
+            onClick={close}
+          >
+            Get in Touch
+          </SolidButton>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <nav
+      id="primary-mobile-nav"
+      className={className}
+      role="navigation"
+      aria-label="Shop categories"
+    >
+      {links}
     </nav>
   );
 }
