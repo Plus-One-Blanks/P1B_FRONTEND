@@ -43,55 +43,37 @@ function getApiBase() {
 export async function removeLogoBackground(dataUrl) {
   const base = getApiBase();
 
-  if (base) {
-    let res;
-    try {
-      res = await fetch(`${base}/removeBackground`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          imageBase64: dataUrl,
-          mimeType: dataUrl.match(/^data:([^;]+);/)?.[1] || 'image/png',
-        }),
-      });
-    } catch (err) {
-      console.warn('[designStudio] removeBackground fetch failed', err);
-      throw new Error(
-        'Could not reach the design API (blocked by network/CSP, or offline). Check the browser console for CSP errors.',
-      );
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Background removal failed');
-    }
-    const json = await res.json();
-    if (!json.imageBase64) {
-      throw new Error('Background removal returned an empty image');
-    }
-    return json.imageBase64;
-  }
-
-  return removeBackgroundClientSide(dataUrl);
-}
-
-/**
- * Client-side fallback using @imgly/background-removal (dynamic import).
- * @param {string} dataUrl
- */
-async function removeBackgroundClientSide(dataUrl) {
-  try {
-    const mod = await import('@imgly/background-removal');
-    const blob = await fetch(dataUrl).then((r) => r.blob());
-    const result = await mod.removeBackground(blob, {
-      output: {format: 'image/png', quality: 0.95},
-    });
-    return await blobToDataUrl(result);
-  } catch (err) {
-    console.warn('[designStudio] client bg-remove unavailable', err);
+  if (!base) {
     throw new Error(
-      'Could not remove background. Restart the dev server so PUBLIC_DESIGN_API_URL loads, then try again.',
+      'Background removal requires the design API. Set PUBLIC_DESIGN_API_URL and redeploy.',
     );
   }
+
+  let res;
+  try {
+    res = await fetch(`${base}/removeBackground`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        imageBase64: dataUrl,
+        mimeType: dataUrl.match(/^data:([^;]+);/)?.[1] || 'image/png',
+      }),
+    });
+  } catch (err) {
+    console.warn('[designStudio] removeBackground fetch failed', err);
+    throw new Error(
+      'Could not reach the design API (blocked by network/CSP, or offline). Check the browser console for CSP errors.',
+    );
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Background removal failed');
+  }
+  const json = await res.json();
+  if (!json.imageBase64) {
+    throw new Error('Background removal returned an empty image');
+  }
+  return json.imageBase64;
 }
 
 /**

@@ -14,7 +14,6 @@
   },
   "prettier": "@shopify/prettier-config",
   "dependencies": {
-    "@imgly/background-removal": "^1.7.0",
     "@shopify/hydrogen": "2025.7.0",
     "graphql": "^16.10.0",
     "graphql-tag": "^2.12.6",
