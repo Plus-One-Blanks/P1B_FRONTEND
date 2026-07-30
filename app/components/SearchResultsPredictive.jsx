@@ -5,6 +5,7 @@ import {
   getEmptyPredictiveSearchResult,
   urlWithTrackingParams,
 } from '~/lib/search';
+import {productPathPrefixFromTags} from '~/lib/productFulfillment';
 import {useAside} from './Aside';
 
 /**
@@ -174,8 +175,9 @@ function SearchResultsPredictiveProducts({term, products, closeSearch}) {
       <h5>Products</h5>
       <ul>
         {products.map((product) => {
+          const prefix = productPathPrefixFromTags(product.tags, product.handle);
           const productUrl = urlWithTrackingParams({
-            baseUrl: `/products/${product.handle}`,
+            baseUrl: `/${prefix}/${product.handle}`,
             trackingParams: product.trackingParameters,
             term: term.current,
           });

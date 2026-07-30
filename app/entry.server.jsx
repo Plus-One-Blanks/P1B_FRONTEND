@@ -17,6 +17,14 @@ export default async function handleRequest(
   reactRouterContext,
   context,
 ) {
+  const designApiUrl = String(context.env.PUBLIC_DESIGN_API_URL || '').trim();
+  let designApiOrigin = '';
+  try {
+    if (designApiUrl) designApiOrigin = new URL(designApiUrl).origin;
+  } catch {
+    designApiOrigin = '';
+  }
+
   const { nonce, header, NonceProvider } = createContentSecurityPolicy({
     shop: {
       checkoutDomain: context.env.PUBLIC_CHECKOUT_DOMAIN,
@@ -37,7 +45,18 @@ export default async function handleRequest(
       'https://cdn.shopify.com',
       'https://shopify.com',
       'data:',
+      'blob:',
       'https://publichk.cdn.ajmall-group.com',
+      'https://storage.googleapis.com',
+    ],
+    // Design Studio Cloud Function (bg remove / save). Without this, fetch() fails as "Failed to fetch".
+    connectSrc: [
+      "'self'",
+      'https://cdn.shopify.com',
+      'https://monorail-edge.shopifysvc.com',
+      ...(designApiOrigin ? [designApiOrigin] : []),
+      'https://*.a.run.app',
+      'https://*.cloudfunctions.net',
     ],
   });
 

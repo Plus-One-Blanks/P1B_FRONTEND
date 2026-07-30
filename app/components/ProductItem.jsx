@@ -13,7 +13,7 @@ import { useVariantUrl } from '~/lib/variants';
  * }}
  */
 export function ProductItem({ product, loading }) {
-  const variantUrl = useVariantUrl(product.handle);
+  const variantUrl = useVariantUrl(product.handle, undefined, product.tags);
   const image = product.featuredImage;
   const price = product.priceRange?.minVariantPrice;
   const vendor = product.vendor || '';

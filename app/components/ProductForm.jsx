@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 import { getProductOptions } from '@shopify/hydrogen';
 import { AddToCartButton } from './AddToCartButton';
 import { useAside } from './Aside';
@@ -113,6 +113,19 @@ function quantityForSizeLabel(quantities, label) {
 }
 
 /**
+ * Attach design attributes to every cart line (copied onto the Shopify order).
+ * @param {Array<Record<string, unknown>>} lines
+ * @param {Array<{ key: string; value: string }> | null | undefined} designAttrs
+ */
+function withDesignAttributes(lines, designAttrs) {
+  if (!designAttrs?.length) return lines;
+  return lines.map((line) => ({
+    ...line,
+    attributes: [...(line.attributes || []), ...designAttrs],
+  }));
+}
+
+/**
  * @param {{
  *   productOptions: MappedProductOptions[];
  *   selectedVariant: ProductFragment['selectedOrFirstAvailableVariant'];
@@ -120,6 +133,9 @@ function quantityForSizeLabel(quantities, label) {
  *   activeTier?: object | null;
  *   currentCartTotal?: number;
  *   onProjectedTotalChange?: (total: number) => void;
+ *   designLineAttributes?: Array<{ key: string; value: string }> | null;
+ *   requireDesign?: boolean;
+ *   designReady?: boolean;
  * }}
  */
 export function ProductForm({
@@ -129,6 +145,9 @@ export function ProductForm({
   activeTier,
   currentCartTotal = 0,
   onProjectedTotalChange,
+  designLineAttributes = null,
+  requireDesign = false,
+  designReady = true,
 }) {
   const navigate = useNavigate();
   const { open } = useAside();
@@ -242,6 +261,9 @@ export function ProductForm({
       })
       .filter((line) => line.merchandiseId);
 
+    const linesForCart = withDesignAttributes(cartLines, designLineAttributes);
+    const designBlocksAdd = requireDesign && !designReady;
+
     return (
       <div className="product-form">
         {effectiveProductOptions
@@ -260,11 +282,12 @@ export function ProductForm({
           sizeQuantities={sizeQuantities}
           onQuantityChange={handleQuantityChange}
           selectedColorProduct={selectedColorProduct}
-          cartLines={cartLines}
+          cartLines={linesForCart}
           onAddToCart={() => open('cart')}
           activeTier={activeTier}
           currentCartTotal={currentCartTotal}
           alwaysShowSizes={['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']}
+          addToCartDisabled={designBlocksAdd}
         />
       </div>
     );
@@ -337,6 +360,9 @@ export function ProductForm({
       });
     }
 
+    const linesForCart = withDesignAttributes(cartLines, designLineAttributes);
+    const designBlocksAdd = requireDesign && !designReady;
+
     return (
       <div className="product-form">
         {effectiveProductOptions
@@ -385,9 +411,9 @@ export function ProductForm({
           </div>
           <div className="one-size-add-to-cart-wrapper">
             <AddToCartButton
-              disabled={cartLines.length === 0}
+              disabled={linesForCart.length === 0 || designBlocksAdd}
               onClick={() => open('cart')}
-              lines={cartLines}
+              lines={linesForCart}
             >
               ADD TO CART
             </AddToCartButton>
@@ -398,6 +424,20 @@ export function ProductForm({
   }
 
   // Standard form for non-size options
+  const standardLines = withDesignAttributes(
+    effectiveSelectedVariant
+      ? [
+          {
+            merchandiseId: effectiveSelectedVariant.id,
+            quantity: 1,
+            selectedVariant: effectiveSelectedVariant,
+          },
+        ]
+      : [],
+    designLineAttributes,
+  );
+  const designBlocksAdd = requireDesign && !designReady;
+
   return (
     <div className="product-form">
       {effectiveProductOptions.map((option) => (
@@ -408,19 +448,13 @@ export function ProductForm({
         />
       ))}
       <AddToCartButton
-        disabled={!effectiveSelectedVariant || !effectiveSelectedVariant.availableForSale}
-        onClick={() => open('cart')}
-        lines={
-          effectiveSelectedVariant
-            ? [
-              {
-                merchandiseId: effectiveSelectedVariant.id,
-                quantity: 1,
-                selectedVariant: effectiveSelectedVariant,
-              },
-            ]
-            : []
+        disabled={
+          !effectiveSelectedVariant ||
+          !effectiveSelectedVariant.availableForSale ||
+          designBlocksAdd
         }
+        onClick={() => open('cart')}
+        lines={standardLines}
       >
         {effectiveSelectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
       </AddToCartButton>
@@ -466,6 +500,10 @@ function ProductOptionItem({ optionName, value, navigate }) {
     isDifferentProduct,
     swatch,
   } = value;
+  const {pathname} = useLocation();
+  const pathPrefix = pathname.includes('/decorated-products/')
+    ? 'decorated-products'
+    : 'products';
 
   const commonProps = {
     className: 'product-options-item',
@@ -483,7 +521,7 @@ function ProductOptionItem({ optionName, value, navigate }) {
         prefetch="intent"
         preventScrollReset
         replace
-        to={`/products/${handle}?${variantUriQuery}`}
+        to={`/${pathPrefix}/${handle}?${variantUriQuery}`}
       >
         <ProductOptionSwatch swatch={swatch} name={name} />
       </Link>
@@ -522,6 +560,7 @@ function ProductOptionItem({ optionName, value, navigate }) {
  *   onAddToCart?: () => void;
  *   activeTier?: object | null;
  *   currentCartTotal?: number;
+ *   addToCartDisabled?: boolean;
  * }}
  */
 function SizeSelectorWithQuantities({
@@ -535,6 +574,7 @@ function SizeSelectorWithQuantities({
   activeTier,
   currentCartTotal = 0,
   alwaysShowSizes = null,
+  addToCartDisabled = false,
 }) {
   // Helper function to find variant by size in the selected color product
   const findVariantForSize = (sizeName) => {
@@ -730,7 +770,7 @@ function SizeSelectorWithQuantities({
       {onAddToCart && (
         <div className="size-selector-add-to-cart-wrapper">
           <AddToCartButton
-            disabled={cartLines.length === 0}
+            disabled={cartLines.length === 0 || addToCartDisabled}
             onClick={onAddToCart}
             lines={cartLines}
           >

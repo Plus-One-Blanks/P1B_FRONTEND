@@ -1,20 +1,52 @@
-import { Suspense, useEffect, useState } from 'react';
-import { Await, Link, NavLink, useAsyncValue } from 'react-router';
-import { useAnalytics, useOptimisticCart } from '@shopify/hydrogen';
-import { Menu, Search, User } from 'lucide-react';
-import { useAside } from '~/components/Aside';
-import { SolidButton } from '~/components/SolidButton';
+import {Suspense, useEffect, useRef, useState} from 'react';
+import {Await, Link, NavLink, useAsyncValue, useLocation} from 'react-router';
+import {useAnalytics, useOptimisticCart} from '@shopify/hydrogen';
+import {ChevronDown, Menu, Search, User} from 'lucide-react';
+import {useAside} from '~/components/Aside';
+import {SolidButton} from '~/components/SolidButton';
 import logo from '~/assets/logo.svg';
 
-/** Primary nav — desktop tabs + mobile drawer (HeaderMenu). */
+/**
+ * Shared category handles. Blank collections keep these handles (now filtered
+ * with fulfillment:blank). Decorated parallels use `{handle}-decorated`.
+ */
+export const APPAREL_CATEGORY_HANDLES = [
+  {title: 'T-Shirts', handle: 't-shirts'},
+  {title: 'Sweatshirts', handle: 'sweatshirts'},
+  {title: 'Polos', handle: 'polos'},
+  {title: 'Hats', handle: 'hats'},
+  {title: 'Jackets', handle: 'jackets'},
+  {title: 'Safety', handle: 'safety'},
+];
+
+/**
+ * Top-level shop modes — desktop dropdowns + mobile accordion.
+ * @type {Array<{
+ *   id: string;
+ *   title: string;
+ *   blurb: string;
+ *   children: Array<{ title: string; url: string }>;
+ * }>}
+ */
 export const HEADER_PRIMARY_NAV = [
-  { title: 'T-Shirts', url: '/collections/t-shirts' },
-  { title: 'Sweatshirts', url: '/collections/sweatshirts' },
-  { title: 'Polos', url: '/collections/polos' },
-  { title: 'Hats', url: '/collections/hats' },
-  { title: 'Jackets', url: '/collections/jackets' },
-  { title: 'Safety', url: '/collections/safety' },
-  { title: 'DTF Transfers', url: '/dtf-transfers' },
+  {
+    id: 'blank',
+    title: 'Blank Apparel',
+    blurb: 'Undecorated garments for print & embroidery',
+    children: APPAREL_CATEGORY_HANDLES.map(({title, handle}) => ({
+      title,
+      url: `/collections/${handle}`,
+    })),
+  },
+  {
+    id: 'decorated',
+    title: 'Decorated Apparel',
+    blurb: 'Custom logos & print locations on apparel',
+    children: APPAREL_CATEGORY_HANDLES.map(({title, handle}) => ({
+      title,
+      url: `/collections/${handle}-decorated`,
+    })),
+  },
 ];
 
 const HEADER_GET_IN_TOUCH_MAILTO =
@@ -23,8 +55,8 @@ const HEADER_GET_IN_TOUCH_MAILTO =
 /**
  * @param {HeaderProps}
  */
-export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
-  const { shop } = header;
+export function Header({header, isLoggedIn, cart, publicStoreDomain}) {
+  const {shop} = header;
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -33,7 +65,7 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
       setIsScrolled(window.scrollY > threshold);
     };
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, {passive: true});
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
@@ -47,7 +79,13 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
             <HeaderMenuMobileToggle />
           </div>
           <div className="header-top-brand">
-            <NavLink prefetch="intent" to="/" style={activeLinkStyle} end className="header-logo-link">
+            <NavLink
+              prefetch="intent"
+              to="/"
+              style={activeLinkStyle}
+              end
+              className="header-logo-link"
+            >
               <div className="header-logo">
                 <img src={logo} alt={shop.name} className="logo-image" />
               </div>
@@ -65,29 +103,108 @@ export function Header({ header, isLoggedIn, cart, publicStoreDomain }) {
 }
 
 function HeaderNavTabs() {
+  const {pathname} = useLocation();
+  const [openId, setOpenId] = useState(/** @type {string | null} */ (null));
+  const navRef = useRef(/** @type {HTMLElement | null} */ (null));
+
+  useEffect(() => {
+    setOpenId(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!openId) return;
+    /** @param {MouseEvent} e */
+    function onDoc(e) {
+      if (!navRef.current?.contains(/** @type {Node} */ (e.target))) {
+        setOpenId(null);
+      }
+    }
+    /** @param {KeyboardEvent} e */
+    function onKey(e) {
+      if (e.key === 'Escape') setOpenId(null);
+    }
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openId]);
+
   return (
-    <nav className="header-nav-tabs" aria-label="Shop categories">
-      {HEADER_PRIMARY_NAV.map((item) => (
-        <NavLink
-          key={item.url}
-          end
-          prefetch="intent"
-          to={item.url}
-          className={({ isActive }) =>
-            ['header-nav-tab', isActive && 'header-nav-tab--current']
-              .filter(Boolean)
-              .join(' ')
-          }
-        >
-          {item.title}
-        </NavLink>
-      ))}
+    <nav
+      ref={navRef}
+      className="header-nav-tabs"
+      aria-label="Shop categories"
+    >
+      {HEADER_PRIMARY_NAV.map((group) => {
+        const isCurrent = group.children.some((c) =>
+          pathMatchesCollection(pathname, c.url),
+        );
+        const isOpen = openId === group.id;
+
+        return (
+          <div
+            key={group.id}
+            className={`header-nav-dropdown ${isOpen ? 'is-open' : ''} ${
+              isCurrent ? 'is-current' : ''
+            }`}
+            onMouseEnter={() => setOpenId(group.id)}
+            onMouseLeave={() => setOpenId(null)}
+          >
+            <button
+              type="button"
+              className={`header-nav-tab header-nav-tab--trigger ${
+                isCurrent ? 'header-nav-tab--current' : ''
+              }`}
+              aria-expanded={isOpen}
+              aria-haspopup="true"
+              onClick={() =>
+                setOpenId((prev) => (prev === group.id ? null : group.id))
+              }
+            >
+              {group.title}
+              <ChevronDown
+                size={16}
+                strokeWidth={2.25}
+                className="header-nav-tab-chevron"
+                aria-hidden
+              />
+            </button>
+            <div className="header-nav-dropdown-panel" role="menu">
+              <p className="header-nav-dropdown-blurb">{group.blurb}</p>
+              <ul className="header-nav-dropdown-list">
+                {group.children.map((child) => (
+                  <li key={child.url}>
+                    <NavLink
+                      prefetch="intent"
+                      to={child.url}
+                      role="menuitem"
+                      className={({isActive}) =>
+                        [
+                          'header-nav-dropdown-link',
+                          isActive && 'is-active',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+                      }
+                      onClick={() => setOpenId(null)}
+                    >
+                      {child.title}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </nav>
   );
 }
 
 function HeaderSearchToggle() {
-  const { open } = useAside();
+  const {open} = useAside();
   return (
     <button
       type="button"
@@ -127,7 +244,6 @@ function HeaderRewards() {
   );
 }
 
-
 /**
  * @param {{
  *   menu: HeaderProps['header']['menu'];
@@ -143,7 +259,14 @@ export function HeaderMenu({
   publicStoreDomain: _publicStoreDomain,
 }) {
   const className = `header-menu-${viewport}`;
-  const { close } = useAside();
+  const {close} = useAside();
+  const {pathname} = useLocation();
+  const [openId, setOpenId] = useState(() => {
+    const match = HEADER_PRIMARY_NAV.find((g) =>
+      g.children.some((c) => pathMatchesCollection(pathname, c.url)),
+    );
+    return match?.id || 'blank';
+  });
 
   const links = (
     <>
@@ -158,19 +281,55 @@ export function HeaderMenu({
           Home
         </NavLink>
       )}
-      {HEADER_PRIMARY_NAV.map((item) => (
-        <NavLink
-          key={item.url}
-          className="header-menu-item"
-          end
-          onClick={close}
-          prefetch="intent"
-          style={activeLinkStyle}
-          to={item.url}
-        >
-          {item.title}
-        </NavLink>
-      ))}
+      {HEADER_PRIMARY_NAV.map((group) => {
+        const expanded = openId === group.id;
+        return (
+          <div key={group.id} className="header-menu-mobile-group">
+            <button
+              type="button"
+              className={`header-menu-mobile-group-trigger ${
+                expanded ? 'is-open' : ''
+              }`}
+              aria-expanded={expanded}
+              onClick={() =>
+                setOpenId((prev) => (prev === group.id ? null : group.id))
+              }
+            >
+              <span>
+                <span className="header-menu-mobile-group-title">
+                  {group.title}
+                </span>
+                <span className="header-menu-mobile-group-blurb">
+                  {group.blurb}
+                </span>
+              </span>
+              <ChevronDown
+                size={18}
+                strokeWidth={2.25}
+                className="header-menu-mobile-group-chevron"
+                aria-hidden
+              />
+            </button>
+            {expanded ? (
+              <div className="header-menu-mobile-group-links">
+                {group.children.map((child) => (
+                  <NavLink
+                    key={child.url}
+                    className="header-menu-item"
+                    end
+                    onClick={close}
+                    prefetch="intent"
+                    style={activeLinkStyle}
+                    to={child.url}
+                  >
+                    {child.title}
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </>
   );
 
@@ -208,6 +367,16 @@ export function HeaderMenu({
       {links}
     </nav>
   );
+}
+
+/**
+ * @param {string} pathname
+ * @param {string} collectionUrl e.g. /collections/t-shirts
+ */
+function pathMatchesCollection(pathname, collectionUrl) {
+  const path = String(pathname || '').replace(/\/$/, '') || '/';
+  const target = String(collectionUrl || '').replace(/\/$/, '');
+  return path === target || path.endsWith(target);
 }
 
 // Mega-menu archive (commented out for early release). To restore: uncomment the block below,

@@ -5,3 +5,11 @@
 
 // Enhance TypeScript's built-in typings.
 import '@total-typescript/ts-reset';
+
+interface ImportMetaEnv {
+  readonly PUBLIC_DESIGN_API_URL?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

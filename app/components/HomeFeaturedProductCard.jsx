@@ -52,7 +52,7 @@ export function HomeFeaturedProductCard({
   imageLoading = 'lazy',
   swatchLimitNarrow,
 }) {
-  const variantUrl = useVariantUrl(product.handle);
+  const variantUrl = useVariantUrl(product.handle, undefined, product.tags);
   const image = product.featuredImage;
   const price = product.priceRange?.minVariantPrice;
   const vendor = product.vendor || '';

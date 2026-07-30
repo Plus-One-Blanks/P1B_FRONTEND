@@ -1,4 +1,5 @@
 import {Analytics, getShopAnalytics, useNonce} from '@shopify/hydrogen';
+import {useEffect} from 'react';
 import {
   Outlet,
   useLocation,
@@ -12,6 +13,7 @@ import {
 } from 'react-router';
 import favicon from '~/assets/P1B_FAVICON.png';
 import {FOOTER_QUERY, HEADER_QUERY} from '~/lib/fragments';
+import {setDesignApiBase} from '~/lib/designStudioApi';
 import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
@@ -105,6 +107,7 @@ export async function loader(args) {
     ...deferredData,
     ...criticalData,
     publicStoreDomain: env.PUBLIC_STORE_DOMAIN,
+    designApiUrl: env.PUBLIC_DESIGN_API_URL || '',
     shop: getShopAnalytics({
       storefront,
       publicStorefrontId: env.PUBLIC_STOREFRONT_ID,
@@ -211,6 +214,15 @@ export function Layout({children}) {
 export default function App() {
   /** @type {RootLoader} */
   const data = useRouteLoaderData('root');
+
+  // Hydrogen puts PUBLIC_* on worker `env`, not browser import.meta.env.
+  // Sync into the design-studio client helper ASAP (render + effect).
+  if (data?.designApiUrl) {
+    setDesignApiBase(data.designApiUrl);
+  }
+  useEffect(() => {
+    setDesignApiBase(data?.designApiUrl);
+  }, [data?.designApiUrl]);
 
   if (!data) {
     return <KeyedRootOutlet />;

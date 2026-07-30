@@ -22,7 +22,50 @@ import { Link, useFetcher, useLocation, useNavigate } from 'react-router';
 import { CartAddColorModal } from '~/components/CartAddColorModal';
 import { CartEditSizesModal } from '~/components/CartEditSizesModal';
 import { retailLineTotalForLine } from '~/lib/cartRetailPricing';
+import { readDesignFromLineAttributes } from '~/lib/designOrderAttributes';
 import { useAside } from './Aside';
+
+/**
+ * Decorated line: mockup thumb + print summary from Shopify line attributes.
+ * @param {{ attributes?: Array<{ key?: string | null; value?: string | null }> | null; compact?: boolean }}
+ */
+function CartLineDesignBadge({ attributes, compact = false }) {
+  const design = readDesignFromLineAttributes(attributes);
+  if (!design) return null;
+
+  return (
+    <div
+      className={
+        compact
+          ? 'cart-line-design cart-line-design--compact'
+          : 'cart-line-design'
+      }
+    >
+      {design.previewUrl ? (
+        <img
+          src={design.previewUrl}
+          alt=""
+          className="cart-line-design-thumb"
+          loading="lazy"
+        />
+      ) : (
+        <span className="cart-line-design-thumb cart-line-design-thumb--empty" />
+      )}
+      <div className="cart-line-design-copy">
+        <span className="cart-line-design-label">Custom design</span>
+        {design.printStyle ? (
+          <span className="cart-line-design-meta">{design.printStyle}</span>
+        ) : null}
+        {design.locations ? (
+          <span className="cart-line-design-meta">{design.locations}</span>
+        ) : null}
+        <span className="cart-line-design-id">
+          ID {String(design.id).slice(0, 8)}…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /** Trailing icon for cart line footer text actions (bounce on hover — see `app.css`). */
 function CartLinePageFooterActionIcon() {
@@ -98,7 +141,7 @@ export function CartLineItem({
 
   const { id, merchandise } = primaryLine;
   const { product, title, image, selectedOptions } = merchandise;
-  const lineItemUrl = useVariantUrl(product.handle, selectedOptions);
+  const lineItemUrl = useVariantUrl(product.handle, selectedOptions, product.tags);
   const { pathname } = useLocation();
   const { close } = useAside();
   const navigate = useNavigate();
@@ -109,8 +152,9 @@ export function CartLineItem({
         handle: product.handle,
         pathname,
         searchParams: new URLSearchParams(),
+        tags: product.tags,
       }),
-    [pathname, product.handle],
+    [pathname, product.handle, product.tags],
   );
 
   const handleLineItemClick = () => {
@@ -294,6 +338,7 @@ export function CartLineItem({
                   </span>
                 ))}
               </div>
+              <CartLineDesignBadge attributes={primaryLine.attributes} />
             </div>
           </div>
 
@@ -431,6 +476,10 @@ export function CartLineItem({
             </span>
           ))}
         </div>
+        <CartLineDesignBadge
+          attributes={primaryLine.attributes}
+          compact
+        />
         <div className="cart-line-controls" onClick={(e) => e.stopPropagation()}>
           <CartLineQuantity line={primaryLine} />
           <div className="cart-line-pricing">

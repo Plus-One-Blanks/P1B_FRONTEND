@@ -1,21 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Image } from '@shopify/hydrogen';
+import {useState, useEffect} from 'react';
+import {Image} from '@shopify/hydrogen';
+import {DEFAULT_DESIGN_TRANSFORM} from '~/lib/designStudioApi';
 
 /**
+ * @typedef {{
+ *   logoDataUrl: string;
+ *   transform?: {x: number; y: number; scale: number; rotation: number};
+ * }} DesignOverlay
+ */
+
+/**
+ * Original product image carousel. Optional design overlays are used only by
+ * decorated PDPs — blanks pass images only and look unchanged.
+ *
  * @param {{
- *   images?: Array<ProductVariantFragment['image']>;
- *   image?: ProductVariantFragment['image']; // Legacy support
+ *   images?: Array<(ProductVariantFragment['image'] & { mockupView?: 'front' | 'back' | 'side' }) | null | undefined>;
+ *   image?: ProductVariantFragment['image'];
+ *   designOverlay?: DesignOverlay | null;
+ *   designOverlayByView?: { front?: DesignOverlay; back?: DesignOverlay } | null;
  * }}
  */
-export function ProductImage({ images, image }) {
-  // Support both new images array and legacy single image prop
-  const imageArray = images || (image ? [image] : []);
+export function ProductImage({
+  images,
+  image,
+  designOverlay = null,
+  designOverlayByView = null,
+}) {
+  const imageArray = (images || (image ? [image] : [])).filter(Boolean);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // Reset to first image when images change (e.g., color selection)
   useEffect(() => {
     setCurrentImageIndex(0);
-  }, [imageArray.length, imageArray[0]?.id]);
+  }, [imageArray.length, imageArray[0]?.id, imageArray[0]?.url]);
 
   if (imageArray.length === 0) {
     return <div className="product-image" />;
@@ -23,16 +39,22 @@ export function ProductImage({ images, image }) {
 
   const currentImage = imageArray[currentImageIndex];
   const hasMultipleImages = imageArray.length > 1;
+  const view = currentImage.mockupView;
+  // Only show artwork on the view it was designed for — never reuse front art on back.
+  const overlay = view
+    ? designOverlayByView?.[view] || null
+    : designOverlay || null;
+  const t = overlay?.transform || DEFAULT_DESIGN_TRANSFORM;
 
   const goToPrevious = () => {
     setCurrentImageIndex((prev) =>
-      prev === 0 ? imageArray.length - 1 : prev - 1
+      prev === 0 ? imageArray.length - 1 : prev - 1,
     );
   };
 
   const goToNext = () => {
     setCurrentImageIndex((prev) =>
-      prev === imageArray.length - 1 ? 0 : prev + 1
+      prev === imageArray.length - 1 ? 0 : prev + 1,
     );
   };
 
@@ -42,10 +64,24 @@ export function ProductImage({ images, image }) {
         <Image
           alt={currentImage.altText || 'Product Image'}
           data={currentImage}
-          key={currentImage.id}
+          key={currentImage.id || currentImage.url}
           sizes="(min-width: 45em) 50vw, 100vw"
         />
-        {hasMultipleImages && (
+        {overlay?.logoDataUrl ? (
+          <img
+            src={overlay.logoDataUrl}
+            alt=""
+            className="product-image-design-overlay"
+            draggable={false}
+            style={{
+              left: `${t.x * 100}%`,
+              top: `${t.y * 100}%`,
+              width: `${t.scale * 100}%`,
+              transform: `translate(-50%, -50%) rotate(${t.rotation || 0}deg)`,
+            }}
+          />
+        ) : null}
+        {hasMultipleImages ? (
           <>
             <button
               type="button"
@@ -86,7 +122,7 @@ export function ProductImage({ images, image }) {
               </svg>
             </button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );

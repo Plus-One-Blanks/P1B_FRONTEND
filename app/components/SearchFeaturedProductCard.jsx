@@ -2,6 +2,7 @@ import {Link} from 'react-router';
 import {Image, Money} from '@shopify/hydrogen';
 import {urlWithTrackingParams} from '~/lib/search';
 import {resolveBrandLogoFromVendorAndTags} from '~/lib/featuredProductCard';
+import {productPathPrefixFromTags} from '~/lib/productFulfillment';
 
 /**
  * Compact featured-style tile for the search drawer (Storefront collection / variant shape).
@@ -12,6 +13,7 @@ import {resolveBrandLogoFromVendorAndTags} from '~/lib/featuredProductCard';
  *     handle: string;
  *     title: string;
  *     vendor?: string | null;
+ *     tags?: string[];
  *     trackingParameters?: string | null;
  *     selectedOrFirstAvailableVariant?: {
  *       image?: {
@@ -34,8 +36,9 @@ export function SearchFeaturedProductCard({
   onNavigate,
   imageLoading = 'lazy',
 }) {
+  const prefix = productPathPrefixFromTags(product.tags, product.handle);
   const productUrl = urlWithTrackingParams({
-    baseUrl: `/products/${product.handle}`,
+    baseUrl: `/${prefix}/${product.handle}`,
     trackingParams: product.trackingParameters,
     term: term.current,
   });
