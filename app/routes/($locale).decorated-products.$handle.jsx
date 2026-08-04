@@ -27,7 +27,11 @@ import {
   loadDesignSession,
   persistDesignSession,
 } from '~/lib/designOrderAttributes';
-import { getDesignApiBaseUrl } from '~/lib/designStudioApi';
+import {
+  getDesignApiBaseUrl,
+  normalizeColorCode,
+  syncDesignMockupsForColor,
+} from '~/lib/designStudioApi';
 import { Wand2 } from 'lucide-react';
 
 /**
@@ -190,6 +194,24 @@ export default function Product() {
       []
     ),
   );
+  const [designCtaAttention, setDesignCtaAttention] = useState(false);
+  const designCtaRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  /** @type {['idle' | 'syncing' | 'error', Function]} */
+  const [mockupSyncStatus, setMockupSyncStatus] = useState(
+    /** @type {'idle' | 'syncing' | 'error'} */ ('idle'),
+  );
+  const [mockupSyncError, setMockupSyncError] = useState(
+    /** @type {string | null} */ (null),
+  );
+  const [mockupSyncRetry, setMockupSyncRetry] = useState(0);
+
+  const nudgeDesignStudio = () => {
+    setDesignCtaAttention(true);
+    // Re-focus the CTA whenever they try sizes/ATC without a saved design
+    requestAnimationFrame(() => {
+      designCtaRef.current?.scrollIntoView({behavior: 'smooth', block: 'center'});
+    });
+  };
 
   // Restore design packet from this tab if the customer refreshed mid-flow
   useEffect(() => {
@@ -203,10 +225,128 @@ export default function Product() {
     persistDesignSession(product.handle, savedDesign);
   }, [product?.handle, savedDesign]);
 
-  const designLineAttributes = buildDesignLineAttributes(savedDesign, {
-    packetBaseUrl: getDesignApiBaseUrl(),
-  });
-  const designReady = Boolean(savedDesign?.remoteId);
+  // Keep the CTA highlight/note until a design is actually saved & synced
+  useEffect(() => {
+    if (savedDesign?.remoteId) setDesignCtaAttention(false);
+  }, [savedDesign?.remoteId]);
+
+  const selectedColorName =
+    studioColors.find((c) => {
+      return (
+        normalizeColorCode(c.code) === normalizeColorCode(selectedColor)
+      );
+    })?.name || null;
+
+  // When the customer switches blank color after designing, re-bake mockups
+  // and upload a hosted preview so cart gets a real image (not a grey box).
+  useEffect(() => {
+    if (!savedDesign?.remoteId || !selectedColor) return;
+
+    const designCode = normalizeColorCode(savedDesign.colorCode);
+    const selCode = normalizeColorCode(selectedColor);
+    const previewOk =
+      Boolean(savedDesign.previewUrl) &&
+      !String(savedDesign.previewUrl).startsWith('data:');
+    if (designCode && designCode === selCode && previewOk) {
+      setMockupSyncStatus('idle');
+      setMockupSyncError(null);
+      return;
+    }
+
+    const productToUse = selectedColorProduct || product;
+    /** @type {Array<{ url?: string; altText?: string | null; id?: string }>} */
+    const garmentImages = [];
+    if (productToUse?.media?.nodes) {
+      productToUse.media.nodes.forEach((mediaNode) => {
+        if (mediaNode?.image) garmentImages.push(mediaNode.image);
+      });
+    }
+    if (productToUse?.adjacentVariants) {
+      productToUse.adjacentVariants.forEach((variant) => {
+        if (
+          variant?.image &&
+          !garmentImages.find((img) => img.id === variant.image.id)
+        ) {
+          garmentImages.push(variant.image);
+        }
+      });
+    }
+    if (!garmentImages.length) {
+      const cached = colorImageCache.current.get(selectedColor);
+      const fallback =
+        cached ||
+        selectedColorProduct?.selectedOrFirstAvailableVariant?.image ||
+        null;
+      if (fallback) garmentImages.push(fallback);
+    }
+
+    let cancelled = false;
+    const designSnapshot = savedDesign;
+    setMockupSyncStatus('syncing');
+    setMockupSyncError(null);
+
+    (async () => {
+      try {
+        const next = await syncDesignMockupsForColor({
+          design: designSnapshot,
+          colorCode: selectedColor,
+          colorName: selectedColorName,
+          garmentImages,
+        });
+        if (cancelled) return;
+        setSavedDesign(next);
+        setMockupSyncStatus('idle');
+        setMockupSyncError(null);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('[designStudio] color mockup sync failed', err);
+        setMockupSyncStatus('error');
+        setMockupSyncError(
+          err instanceof Error
+            ? err.message
+            : 'Could not update the mockup for this color.',
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedColor,
+    selectedColorName,
+    selectedColorProduct?.id,
+    savedDesign?.remoteId,
+    savedDesign?.colorCode,
+    mockupSyncRetry,
+  ]);
+
+  const designMatchesSelectedColor =
+    Boolean(savedDesign) &&
+    normalizeColorCode(savedDesign?.colorCode) ===
+      normalizeColorCode(selectedColor);
+  const hostedPreviewReady =
+    designMatchesSelectedColor &&
+    Boolean(savedDesign?.previewUrl) &&
+    !String(savedDesign?.previewUrl || '').startsWith('data:');
+  const designLineAttributes = buildDesignLineAttributes(
+    savedDesign
+      ? {
+          ...savedDesign,
+          previewUrl: hostedPreviewReady ? savedDesign.previewUrl : null,
+        }
+      : null,
+    {
+      packetBaseUrl: getDesignApiBaseUrl(),
+      colorCode: selectedColor,
+      colorName: selectedColorName,
+    },
+  );
+  const designReady =
+    Boolean(savedDesign?.remoteId) &&
+    mockupSyncStatus !== 'syncing' &&
+    hostedPreviewReady;
 
   const cartFetcher = useFetcher();
   const isMountedRef = useRef(true);
@@ -354,8 +494,29 @@ export default function Product() {
   }
 
   const overlayByView = designOverlaysByView(savedDesign);
+  const mockupsMatchSelectedColor =
+    Boolean(savedDesign) &&
+    normalizeColorCode(savedDesign?.colorCode) ===
+      normalizeColorCode(selectedColor);
+  const bakedMockups = (savedDesign?.viewMockups || [])
+    .map((m) => {
+      const url = m.url || m.dataUrl;
+      if (!url) return null;
+      return {
+        id: `mockup-${m.view}`,
+        url,
+        altText: `${title} · ${m.view} mockup`,
+        mockupView: m.view,
+        isBakedMockup: true,
+      };
+    })
+    .filter(Boolean);
+  const useBakedMockups =
+    mockupsMatchSelectedColor && bakedMockups.length > 0;
   const galleryImages = savedDesign
-    ? frontAndBackGalleryImages(allImages, overlayByView)
+    ? useBakedMockups
+      ? bakedMockups
+      : frontAndBackGalleryImages(allImages, overlayByView)
     : allImages;
 
   return (
@@ -364,7 +525,7 @@ export default function Product() {
         <div className="product-left">
           <ProductImage
             images={galleryImages}
-            designOverlayByView={overlayByView}
+            designOverlayByView={useBakedMockups ? null : overlayByView}
           />
           {relatedProducts && (
             <Suspense fallback={null}>
@@ -507,7 +668,12 @@ export default function Product() {
               currentProduct={product}
             />
           )}
-          <div className="product-design-cta-wrap product-design-cta-wrap--buy-col">
+          <div
+            ref={designCtaRef}
+            className={`product-design-cta-wrap product-design-cta-wrap--buy-col${
+              designCtaAttention ? ' is-attention' : ''
+            }`}
+          >
             <p className="product-design-cta-label">Customize</p>
             <button
               type="button"
@@ -517,7 +683,33 @@ export default function Product() {
               <Wand2 size={18} className="button-icon" aria-hidden />
               {savedDesign ? 'Edit design' : 'Start design studio'}
             </button>
-            {savedDesign?.remoteId ? (
+            {designCtaAttention && !designReady ? (
+              <p className="product-design-cta-nudge" role="status">
+                {mockupSyncStatus === 'syncing'
+                  ? 'Updating the mockup for this blank color…'
+                  : mockupSyncStatus === 'error'
+                    ? 'Mockup update failed — use Retry below, then add to cart.'
+                    : 'Please save your design here before adding sizes to cart.'}
+              </p>
+            ) : null}
+            {mockupSyncStatus === 'syncing' ? (
+              <p className="product-design-saved-note" role="status">
+                Building a mockup on this blank color — add to cart will unlock
+                in a moment.
+              </p>
+            ) : mockupSyncStatus === 'error' ? (
+              <p className="product-design-saved-note product-design-saved-note--warn" role="alert">
+                {mockupSyncError ||
+                  'Could not save a mockup for this blank color.'}{' '}
+                <button
+                  type="button"
+                  className="product-design-size-hint-link"
+                  onClick={() => setMockupSyncRetry((n) => n + 1)}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : savedDesign?.remoteId ? (
               <p className="product-design-saved-note">
                 Design saved (ID {savedDesign.remoteId.slice(0, 8)}…) — artwork
                 only shows on the sides you decorated. It will travel with this
@@ -547,6 +739,15 @@ export default function Product() {
             designLineAttributes={designLineAttributes}
             requireDesign
             designReady={designReady}
+            designReadyHint={
+              mockupSyncStatus === 'syncing'
+                ? 'Updating the mockup for this blank color — wait a second, then add to cart.'
+                : mockupSyncStatus === 'error'
+                  ? 'Mockup for this color is not ready yet. Tap Retry above the size grid.'
+                  : undefined
+            }
+            onNeedDesign={nudgeDesignStudio}
+            onRequestDesign={() => setDesignStudioOpen(true)}
           />
           <ProductFeatures />
         </div>

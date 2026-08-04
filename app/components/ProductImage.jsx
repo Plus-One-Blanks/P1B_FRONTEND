@@ -41,9 +41,18 @@ export function ProductImage({
   const hasMultipleImages = imageArray.length > 1;
   const view = currentImage.mockupView;
   // Only show artwork on the view it was designed for — never reuse front art on back.
-  const overlay = view
-    ? designOverlayByView?.[view] || null
-    : designOverlay || null;
+  // Baked studio captures already include the logo — never re-overlay.
+  const isBakedMockup = Boolean(
+    currentImage.isBakedMockup ||
+      currentImage.url?.startsWith('data:') ||
+      currentImage.url?.includes('storage.googleapis.com'),
+  );
+  const overlay =
+    isBakedMockup
+      ? null
+      : view
+        ? designOverlayByView?.[view] || null
+        : designOverlay || null;
   const t = overlay?.transform || DEFAULT_DESIGN_TRANSFORM;
 
   const goToPrevious = () => {
@@ -61,12 +70,21 @@ export function ProductImage({
   return (
     <div className="product-image-container">
       <div className="product-image">
-        <Image
-          alt={currentImage.altText || 'Product Image'}
-          data={currentImage}
-          key={currentImage.id || currentImage.url}
-          sizes="(min-width: 45em) 50vw, 100vw"
-        />
+        {isBakedMockup ? (
+          <img
+            src={currentImage.url}
+            alt={currentImage.altText || 'Design mockup'}
+            className="product-image-baked-mockup"
+            key={currentImage.id || currentImage.url}
+          />
+        ) : (
+          <Image
+            alt={currentImage.altText || 'Product Image'}
+            data={currentImage}
+            key={currentImage.id || currentImage.url}
+            sizes="(min-width: 45em) 50vw, 100vw"
+          />
+        )}
         {overlay?.logoDataUrl ? (
           <img
             src={overlay.logoDataUrl}

@@ -285,6 +285,8 @@ export async function loader({context, params, request}) {
       mode === 'addColor' ? addColorUsesSiblings : undefined,
     selectedColorCode:
       mode === 'addColor' ? selectedSiblingRow?.code ?? null : undefined,
+    selectedColorName:
+      mode === 'addColor' ? selectedSiblingRow?.name ?? null : undefined,
     selectedFormattedCode:
       mode === 'addColor'
         ? selectedSiblingRow?.formattedCode ?? null
@@ -317,7 +319,7 @@ export async function action({request, context}) {
 
   const formData = await request.formData();
   const raw = formData.get('payload');
-  /** @type {{ changes?: Array<{ variantId: string; quantity: number; lineId?: string | null }> } | null} */
+  /** @type {{ changes?: Array<{ variantId: string; quantity: number; lineId?: string | null }>; attributes?: Array<{ key: string; value: string }> } | null} */
   let body = null;
   try {
     body = raw ? JSON.parse(String(raw)) : null;
@@ -329,6 +331,10 @@ export async function action({request, context}) {
   if (!changes.length) {
     return Response.json({error: 'No changes'}, {status: 400});
   }
+
+  const sharedAttributes = Array.isArray(body?.attributes)
+    ? body.attributes.filter((a) => a?.key && a?.value != null)
+    : [];
 
   const toRemove = [];
   const toUpdate = [];
@@ -345,7 +351,11 @@ export async function action({request, context}) {
     } else if (qty > 0 && lineId) {
       toUpdate.push({id: lineId, quantity: qty});
     } else if (qty > 0 && !lineId) {
-      toAdd.push({merchandiseId: variantId, quantity: qty});
+      toAdd.push({
+        merchandiseId: variantId,
+        quantity: qty,
+        ...(sharedAttributes.length ? {attributes: sharedAttributes} : {}),
+      });
     }
   }
 

@@ -28,7 +28,8 @@ export const LOCATION_CATALOG = {
     label: 'Left chest',
     group: 'front',
     description: 'Small logo placement',
-    transform: {x: 0.38, y: 0.32, scale: 0.14, rotation: 0},
+    // Wearer's left chest on a front flat — inset from sleeve, below collar
+    transform: {x: 0.62, y: 0.37, scale: 0.12, rotation: 0},
   },
   'back-center': {
     id: 'back-center',

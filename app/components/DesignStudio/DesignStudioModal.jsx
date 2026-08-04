@@ -12,6 +12,8 @@ import {
   ChevronRight,
   Pipette,
   Wand2,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import {
   DEFAULT_DESIGN_TRANSFORM,
@@ -20,7 +22,7 @@ import {
   removeColorsFromImage,
   sampleImageColor,
   saveDesignRemote,
-  composeDesignPreview,
+  composeStageExactPreview,
 } from '~/lib/designStudioApi';
 import {
   PRINT_STYLES,
@@ -28,6 +30,7 @@ import {
   garmentViewForLocation,
   locationsForGarment,
   pickGarmentViewImage,
+  LOCATION_CATALOG,
 } from '~/components/DesignStudio/designStudioLocations';
 
 const STEPS = [
@@ -36,6 +39,39 @@ const STEPS = [
   {id: 'artwork', label: 'Artwork'},
   {id: 'print', label: 'Print'},
 ];
+
+/**
+ * Normalize color codes so `#000000` and `000000` compare equal.
+ * @param {string | null | undefined} code
+ */
+function normalizeColorCode(code) {
+  return String(code || '')
+    .trim()
+    .replace(/^#/, '')
+    .toLowerCase();
+}
+
+/**
+ * Prefer the studio swatch's canonical code when the PDP passes a tag-style code.
+ * @param {string | null | undefined} code
+ * @param {Array<{ code?: string }>} colors
+ */
+function resolveStudioColorCode(code, colors = []) {
+  const want = normalizeColorCode(code);
+  if (!want) return null;
+  const match = colors.find((c) => normalizeColorCode(c.code) === want);
+  return match?.code || (String(code || '').startsWith('#') ? String(code) : code ? `#${want}` : null);
+}
+
+/**
+ * @param {string | null | undefined} a
+ * @param {string | null | undefined} b
+ */
+function colorsMatch(a, b) {
+  const na = normalizeColorCode(a);
+  const nb = normalizeColorCode(b);
+  return Boolean(na) && na === nb;
+}
 
 /**
  * Full-screen design studio for custom decorated apparel.
@@ -88,25 +124,23 @@ export function DesignStudioModal({
   const [step, setStep] = useState(
     /** @type {'color' | 'locations' | 'artwork' | 'print'} */ ('color'),
   );
-  const [pendingColor, setPendingColor] = useState(colorCode);
+  const [pendingColor, setPendingColor] = useState(() =>
+    resolveStudioColorCode(colorCode, colors) || colorCode,
+  );
+  const wasOpenRef = useRef(false);
 
   /** @type {[string[], Function]} */
   const [selectedLocationIds, setSelectedLocationIds] = useState(() => {
     if (initialDesign?.locations?.length) {
       return initialDesign.locations.map((l) => l.id);
     }
-    const first =
-      locationsForGarment(detectGarmentKind(productTitle))[0]?.id ||
-      'front-center';
-    return [first];
+    return [];
   });
-  const [activeLocationId, setActiveLocationId] = useState(() => {
-    if (initialDesign?.locations?.[0]?.id) return initialDesign.locations[0].id;
-    return (
-      locationsForGarment(detectGarmentKind(productTitle))[0]?.id ||
-      'front-center'
-    );
-  });
+  const [activeLocationId, setActiveLocationId] = useState(
+    /** @type {string | null} */ (
+      initialDesign?.locations?.[0]?.id || null
+    ),
+  );
   /** @type {[Record<string, { logoDataUrl: string; originalDataUrl: string; transform: typeof DEFAULT_DESIGN_TRANSFORM }>, Function]} */
   const [artByLocation, setArtByLocation] = useState(() =>
     hydrateArt(initialDesign),
@@ -116,38 +150,62 @@ export function DesignStudioModal({
   );
   const [rightsOk, setRightsOk] = useState(false);
   const [rightsNeedsAttention, setRightsNeedsAttention] = useState(false);
+  const [locationsNeedAttention, setLocationsNeedAttention] = useState(false);
   const [busy, setBusy] = useState(/** @type {string | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [dragging, setDragging] = useState(false);
   const [pickMode, setPickMode] = useState(false);
   /** @type {[Array<{ r: number; g: number; b: number; hex: string }>, Function]} */
   const [removeColors, setRemoveColors] = useState([]);
-  const [colorTolerance, setColorTolerance] = useState(32);
+  /** @type {[Record<string, { past: string[]; future: string[] }>, Function]} */
+  const [artHistory, setArtHistory] = useState({});
   const stageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const logoImgRef = useRef(/** @type {HTMLImageElement | null} */ (null));
   const dragStart = useRef({mx: 0, my: 0, x: 0.5, y: 0.36});
   const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const rightsRef = useRef(/** @type {HTMLLabelElement | null} */ (null));
+  const locationsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
   const activeArt = artByLocation[activeLocationId] || null;
   const activeMeta = locationOptions.find((l) => l.id === activeLocationId);
 
   useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
     if (!open) return;
-    setStep(initialDesign?.locations?.length ? 'artwork' : 'color');
-    setPendingColor(colorCode);
-    setError(null);
-    setRightsOk(false);
-    setRightsNeedsAttention(false);
-    setPickMode(false);
-    setRemoveColors([]);
-    if (initialDesign?.locations?.length) {
-      setSelectedLocationIds(initialDesign.locations.map((l) => l.id));
-      setActiveLocationId(initialDesign.locations[0].id);
-      setArtByLocation(hydrateArt(initialDesign));
-      setPrintStyle(initialDesign.printStyle || 'simple');
+
+    // Only reset wizard state when the modal opens — not when the parent
+    // syncs colorCode after Confirm (that was bouncing users back to step 1).
+    if (justOpened) {
+      setStep(initialDesign?.locations?.length ? 'artwork' : 'color');
+      setPendingColor(resolveStudioColorCode(colorCode, colors) || colorCode);
+      setError(null);
+      setRightsOk(false);
+      setRightsNeedsAttention(false);
+      setLocationsNeedAttention(false);
+      setPickMode(false);
+      setRemoveColors([]);
+      setArtHistory({});
+      if (initialDesign?.locations?.length) {
+        setSelectedLocationIds(initialDesign.locations.map((l) => l.id));
+        setActiveLocationId(initialDesign.locations[0].id);
+        setArtByLocation(hydrateArt(initialDesign));
+        setPrintStyle(initialDesign.printStyle || 'simple');
+      } else {
+        setSelectedLocationIds([]);
+        setActiveLocationId(null);
+      }
     }
-  }, [open, colorCode, initialDesign]);
+  }, [open, colorCode, initialDesign, colors]);
+
+  // When sibling colors load after open, rematch the PDP color onto a swatch.
+  useEffect(() => {
+    if (!open || step !== 'color' || !colors.length) return;
+    const resolved = resolveStudioColorCode(pendingColor || colorCode, colors);
+    if (resolved && resolved !== pendingColor) {
+      setPendingColor(resolved);
+    }
+  }, [open, step, colors, colorCode, pendingColor]);
 
   useEffect(() => {
     // Reset pick targets when switching locations
@@ -180,17 +238,93 @@ export function DesignStudioModal({
   }, [open, onClose, busy, pickMode]);
 
   const toggleLocation = (id) => {
+    setLocationsNeedAttention(false);
+    setError(null);
     setSelectedLocationIds((prev) => {
       const on = prev.includes(id);
       if (on) {
-        if (prev.length <= 1) return prev;
+        if (prev.length <= 1) {
+          // Allow fully clearing selection
+          setActiveLocationId(null);
+          return [];
+        }
         const next = prev.filter((x) => x !== id);
-        if (activeLocationId === id) setActiveLocationId(next[0]);
+        if (activeLocationId === id) setActiveLocationId(next[0] || null);
         return next;
       }
       setActiveLocationId(id);
       return [...prev, id];
     });
+  };
+
+  const pushArtHistory = (locationId, previousDataUrl) => {
+    if (!locationId || !previousDataUrl) return;
+    setArtHistory((prev) => {
+      const entry = prev[locationId] || {past: [], future: []};
+      return {
+        ...prev,
+        [locationId]: {
+          past: [...entry.past, previousDataUrl].slice(-25),
+          future: [],
+        },
+      };
+    });
+  };
+
+  const clearArtHistory = (locationId) => {
+    if (!locationId) return;
+    setArtHistory((prev) => {
+      if (!prev[locationId]) return prev;
+      const next = {...prev};
+      delete next[locationId];
+      return next;
+    });
+  };
+
+  const handleUndoArt = () => {
+    if (!activeLocationId || !activeArt?.logoDataUrl) return;
+    const entry = artHistory[activeLocationId];
+    if (!entry?.past?.length) return;
+    const previous = entry.past[entry.past.length - 1];
+    const current = activeArt.logoDataUrl;
+    setArtHistory((prev) => ({
+      ...prev,
+      [activeLocationId]: {
+        past: entry.past.slice(0, -1),
+        future: [current, ...(entry.future || [])].slice(0, 25),
+      },
+    }));
+    setArtByLocation((prev) => ({
+      ...prev,
+      [activeLocationId]: {
+        ...prev[activeLocationId],
+        logoDataUrl: previous,
+      },
+    }));
+    setError(null);
+  };
+
+  const handleRedoArt = () => {
+    if (!activeLocationId || !activeArt) return;
+    const entry = artHistory[activeLocationId];
+    if (!entry?.future?.length) return;
+    const next = entry.future[0];
+    const current = activeArt.logoDataUrl;
+    setArtHistory((prev) => ({
+      ...prev,
+      [activeLocationId]: {
+        past: [...(entry.past || []), current].slice(-25),
+        future: entry.future.slice(1),
+      },
+    }));
+    setArtByLocation((prev) => ({
+      ...prev,
+      [activeLocationId]: {
+        ...prev[activeLocationId],
+        logoDataUrl: next,
+      },
+    }));
+    setError(null);
   };
 
   const updateActiveTransform = (patch) => {
@@ -224,6 +358,7 @@ export function DesignStudioModal({
           transform: {...preset},
         },
       }));
+      clearArtHistory(activeLocationId);
       setRemoveColors([]);
       setPickMode(false);
     } catch (err) {
@@ -234,11 +369,13 @@ export function DesignStudioModal({
   };
 
   const handleRemoveBg = async () => {
-    if (!activeArt?.logoDataUrl) return;
+    if (!activeArt?.logoDataUrl || !activeLocationId) return;
     setError(null);
     setBusy('remove-bg');
     try {
-      const cut = await removeLogoBackground(activeArt.logoDataUrl);
+      const before = activeArt.logoDataUrl;
+      const cut = await removeLogoBackground(before);
+      pushArtHistory(activeLocationId, before);
       setArtByLocation((prev) => ({
         ...prev,
         [activeLocationId]: {
@@ -262,24 +399,23 @@ export function DesignStudioModal({
   };
 
   const handleApplyColorRemove = async () => {
-    if (!activeArt?.logoDataUrl || !removeColors.length) return;
+    if (!activeArt?.logoDataUrl || !removeColors.length || !activeLocationId) {
+      return;
+    }
     setError(null);
     setBusy('color-remove');
     try {
-      // Always apply against the original so tolerance tweaks stay predictable
-      const source =
-        activeArt.originalDataUrl || activeArt.logoDataUrl;
-      const cut = await removeColorsFromImage(
-        source,
-        removeColors,
-        colorTolerance,
-      );
+      // Apply on the current artwork so each remove stacks; undo steps back.
+      const before = activeArt.logoDataUrl;
+      const cut = await removeColorsFromImage(before, removeColors, 32);
+      pushArtHistory(activeLocationId, before);
       setArtByLocation((prev) => ({
         ...prev,
         [activeLocationId]: {
           ...prev[activeLocationId],
           logoDataUrl: cut,
-          originalDataUrl: source,
+          originalDataUrl:
+            prev[activeLocationId]?.originalDataUrl || before,
         },
       }));
     } catch (err) {
@@ -292,7 +428,10 @@ export function DesignStudioModal({
   };
 
   const handleRestoreOriginal = () => {
-    if (!activeArt?.originalDataUrl) return;
+    if (!activeArt?.originalDataUrl || !activeLocationId) return;
+    if (activeArt.logoDataUrl !== activeArt.originalDataUrl) {
+      pushArtHistory(activeLocationId, activeArt.logoDataUrl);
+    }
     setArtByLocation((prev) => ({
       ...prev,
       [activeLocationId]: {
@@ -342,9 +481,19 @@ export function DesignStudioModal({
     onPointerDownLogo(e);
   };
 
-  const locationsReady = selectedLocationIds.every(
-    (id) => Boolean(artByLocation[id]?.logoDataUrl),
+  const orderedSelectedLocationIds = useMemo(
+    () =>
+      locationOptions
+        .map((l) => l.id)
+        .filter((id) => selectedLocationIds.includes(id)),
+    [locationOptions, selectedLocationIds],
   );
+
+  const locationsReady =
+    orderedSelectedLocationIds.length > 0 &&
+    orderedSelectedLocationIds.every((id) =>
+      Boolean(artByLocation[id]?.logoDataUrl),
+    );
 
   const handleSave = async () => {
     if (!locationsReady) {
@@ -367,9 +516,9 @@ export function DesignStudioModal({
     setError(null);
     setBusy('save');
     try {
-      const primaryId = selectedLocationIds[0];
+      const primaryId = orderedSelectedLocationIds[0] || selectedLocationIds[0];
       const primary = artByLocation[primaryId];
-      const locations = selectedLocationIds.map((id) => ({
+      const locations = orderedSelectedLocationIds.map((id) => ({
         id,
         label: locationOptions.find((l) => l.id === id)?.label || id,
         logoDataUrl: artByLocation[id].logoDataUrl,
@@ -387,25 +536,53 @@ export function DesignStudioModal({
         colorName,
         previewUrl: null,
         remoteId: null,
+        viewMockups: /** @type {import('~/lib/designStudioApi').DesignViewMockup[]} */ (
+          []
+        ),
       };
 
-      const previewGarment =
-        pickGarmentViewImage(
-          productImages?.length ? productImages : productImage ? [productImage] : [],
-          garmentViewForLocation(
-            locationOptions.find((l) => l.id === primaryId),
-          ),
-        ) || productImage;
+      const imagePool =
+        productImages?.length > 0
+          ? productImages
+          : productImage
+            ? [productImage]
+            : [];
 
-      let previewBase64 = null;
-      try {
-        previewBase64 = await composeDesignPreview({
-          garmentUrl: previewGarment?.url,
-          locations,
-        });
-      } catch {
-        previewBase64 = null;
+      /** @type {Record<string, typeof locations>} */
+      const logosByView = {};
+      for (const loc of locations) {
+        const view = garmentViewForLocation(LOCATION_CATALOG[loc.id]);
+        if (!logosByView[view]) logosByView[view] = [];
+        logosByView[view].push(loc);
       }
+
+      /** @type {import('~/lib/designStudioApi').DesignViewMockup[]} */
+      const viewMockups = [];
+      for (const view of /** @type {Array<'front'|'back'|'side'>} */ ([
+        'front',
+        'back',
+        'side',
+      ])) {
+        const logos = logosByView[view];
+        if (!logos?.length) continue;
+        const garment =
+          pickGarmentViewImage(imagePool, view) || productImage || null;
+        try {
+          const dataUrl = await composeStageExactPreview({
+            garmentUrl: garment?.url,
+            logos,
+            size: 1000,
+          });
+          if (dataUrl) {
+            viewMockups.push({view, dataUrl, url: null});
+          }
+        } catch {
+          // continue other views
+        }
+      }
+
+      localDesign.viewMockups = viewMockups;
+      const previewBase64 = viewMockups[0]?.dataUrl || null;
 
       try {
         const remote = await saveDesignRemote({
@@ -423,11 +600,25 @@ export function DesignStudioModal({
           transform: localDesign.transform,
           logoBase64: primary.logoDataUrl,
           previewBase64: previewBase64 || undefined,
+          viewMockups: viewMockups.map((m) => ({
+            view: m.view,
+            imageBase64: m.dataUrl,
+          })),
         });
         if (remote?.id) {
           localDesign.remoteId = remote.id;
           localDesign.previewUrl =
             remote.previewUrl || remote.logoUrl || previewBase64 || null;
+          if (Array.isArray(remote.viewMockups) && remote.viewMockups.length) {
+            localDesign.viewMockups = remote.viewMockups.map((m) => ({
+              view: m.view,
+              url: m.url || null,
+              dataUrl: null,
+            }));
+          } else if (previewBase64) {
+            // Keep local baked mockups so PDP matches the studio
+            localDesign.viewMockups = viewMockups;
+          }
         } else {
           throw new Error(
             'Design API did not return a design ID. Check PUBLIC_DESIGN_API_URL and try saving again.',
@@ -506,8 +697,8 @@ export function DesignStudioModal({
     pickGarmentViewImage(imagePool, garmentView) || productImage || null;
 
   const confirmedColorLabel =
+    colors.find((c) => colorsMatch(c.code, pendingColor || colorCode))?.name ||
     colorName ||
-    colors.find((c) => c.code === (pendingColor || colorCode))?.name ||
     pendingColor ||
     colorCode ||
     'Selected color';
@@ -517,24 +708,40 @@ export function DesignStudioModal({
   const goNext = () => {
     setError(null);
     if (step === 'color') {
-      if (pendingColor) onConfirmColor?.(pendingColor);
+      const resolved =
+        resolveStudioColorCode(pendingColor || colorCode, colors) ||
+        pendingColor ||
+        colorCode;
+      if (!resolved) {
+        setError('Please select a garment color to continue.');
+        return;
+      }
+      setPendingColor(resolved);
+      onConfirmColor?.(resolved);
       setStep('locations');
       return;
     }
     if (step === 'locations') {
       if (!selectedLocationIds.length) {
-        setError('Choose at least one decoration location.');
+        setError('Please select at least one decoration location to continue.');
+        setLocationsNeedAttention(true);
+        requestAnimationFrame(() => {
+          locationsRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          });
+        });
         return;
       }
-      if (!selectedLocationIds.includes(activeLocationId)) {
-        setActiveLocationId(selectedLocationIds[0]);
-      }
+      setLocationsNeedAttention(false);
+      // Always start artwork on the first selected location (catalog L→R order)
+      setActiveLocationId(orderedSelectedLocationIds[0] || selectedLocationIds[0]);
       setStep('artwork');
       return;
     }
     if (step === 'artwork') {
       if (!locationsReady) {
-        const missing = selectedLocationIds.find(
+        const missing = orderedSelectedLocationIds.find(
           (id) => !artByLocation[id]?.logoDataUrl,
         );
         if (missing) setActiveLocationId(missing);
@@ -551,7 +758,12 @@ export function DesignStudioModal({
     setError(null);
     if (step === 'locations') setStep('color');
     else if (step === 'artwork') setStep('locations');
-    else if (step === 'print') setStep('artwork');
+    else if (step === 'print') {
+      setActiveLocationId(
+        orderedSelectedLocationIds[0] || selectedLocationIds[0] || null,
+      );
+      setStep('artwork');
+    }
   };
 
   return createPortal(
@@ -624,14 +836,16 @@ export function DesignStudioModal({
 
               {colors.length > 0 ? (
                 <div className="design-studio-swatches" role="listbox">
-                  {colors.map((c) => (
+                  {colors.map((c) => {
+                    const selected = colorsMatch(pendingColor, c.code);
+                    return (
                     <button
                       key={c.code}
                       type="button"
                       role="option"
-                      aria-selected={pendingColor === c.code}
+                      aria-selected={selected}
                       className={`design-studio-swatch ${
-                        pendingColor === c.code ? 'is-selected' : ''
+                        selected ? 'is-selected' : ''
                       }`}
                       style={{
                         background: c.code.startsWith('#')
@@ -644,7 +858,8 @@ export function DesignStudioModal({
                         onConfirmColor?.(c.code);
                       }}
                     />
-                  ))}
+                    );
+                  })}
                 </div>
               ) : null}
 
@@ -664,7 +879,12 @@ export function DesignStudioModal({
                 for each one next.
               </p>
             </div>
-            <div className="design-studio-location-grid">
+            <div
+              ref={locationsRef}
+              className={`design-studio-location-grid${
+                locationsNeedAttention ? ' is-attention' : ''
+              }`}
+            >
               {locationOptions.map((loc) => {
                 const selected = selectedLocationIds.includes(loc.id);
                 return (
@@ -708,6 +928,19 @@ export function DesignStudioModal({
                 ref={stageRef}
                 className={`design-studio-stage ${dragging ? 'is-dragging' : ''}`}
               >
+                <div className="design-studio-stage-side" aria-live="polite">
+                  <span className="design-studio-stage-side-kicker">
+                    Designing
+                  </span>
+                  <span className="design-studio-stage-side-label">
+                    {activeMeta?.label || 'Location'}
+                    {garmentView === 'back'
+                      ? ' · Back'
+                      : garmentView === 'side'
+                        ? ' · Side'
+                        : ' · Front'}
+                  </span>
+                </div>
                 {displayImage?.url ? (
                   <div className="design-studio-garment-frame">
                     <HydrogenImage
@@ -718,6 +951,33 @@ export function DesignStudioModal({
                 ) : (
                   <div className="design-studio-garment is-empty" />
                 )}
+                {activeMeta?.transform ? (
+                  <div
+                    className={`design-studio-placement-guide${
+                      activeArt?.logoDataUrl ? ' is-filled' : ' is-empty'
+                    }`}
+                    style={{
+                      left: `${activeMeta.transform.x * 100}%`,
+                      top: `${activeMeta.transform.y * 100}%`,
+                      width: `${activeMeta.transform.scale * 100}%`,
+                      transform: `translate(-50%, -50%) rotate(${
+                        activeMeta.transform.rotation || 0
+                      }deg)`,
+                    }}
+                    aria-hidden={!activeArt?.logoDataUrl}
+                  >
+                    {!activeArt?.logoDataUrl ? (
+                      <span className="design-studio-placement-guide-copy">
+                        <span className="design-studio-placement-guide-title">
+                          Logo area
+                        </span>
+                        <span className="design-studio-placement-guide-sub">
+                          {activeMeta.label}
+                        </span>
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {activeArt?.logoDataUrl ? (
                   <img
                     ref={logoImgRef}
@@ -735,12 +995,7 @@ export function DesignStudioModal({
                       transform: `translate(-50%, -50%) rotate(${activeArt.transform.rotation}deg)`,
                     }}
                   />
-                ) : (
-                  <div className="design-studio-stage-hint">
-                    Upload artwork for{' '}
-                    <strong>{activeMeta?.label || 'this location'}</strong>
-                  </div>
-                )}
+                ) : null}
                 {pickMode && activeArt?.logoDataUrl ? (
                   <div className="design-studio-pick-banner">
                     Click the artwork to select colors to remove
@@ -751,7 +1006,7 @@ export function DesignStudioModal({
 
             <div className="design-studio-tools">
               <div className="design-studio-loc-tabs" role="tablist">
-                {selectedLocationIds.map((id) => {
+                {orderedSelectedLocationIds.map((id) => {
                   const meta = locationOptions.find((l) => l.id === id);
                   const hasArt = Boolean(artByLocation[id]?.logoDataUrl);
                   return (
@@ -868,18 +1123,34 @@ export function DesignStudioModal({
                   </button>
                 </div>
 
-                <label className="design-studio-slider-label">
-                  Color range · {colorTolerance}
-                  <input
-                    type="range"
-                    min={8}
-                    max={72}
-                    step={1}
-                    value={colorTolerance}
-                    disabled={!activeArt?.logoDataUrl}
-                    onChange={(e) => setColorTolerance(Number(e.target.value))}
-                  />
-                </label>
+                <div className="design-studio-history-row">
+                  <button
+                    type="button"
+                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                    disabled={
+                      !artHistory[activeLocationId || '']?.past?.length ||
+                      Boolean(busy)
+                    }
+                    onClick={handleUndoArt}
+                    title="Undo last clean-up step"
+                  >
+                    <Undo2 size={18} aria-hidden />
+                    Undo
+                  </button>
+                  <button
+                    type="button"
+                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                    disabled={
+                      !artHistory[activeLocationId || '']?.future?.length ||
+                      Boolean(busy)
+                    }
+                    onClick={handleRedoArt}
+                    title="Redo clean-up step"
+                  >
+                    <Redo2 size={18} aria-hidden />
+                    Redo
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -927,9 +1198,9 @@ export function DesignStudioModal({
                   Auto clean (AI)
                 </button>
                 <p className="design-studio-hint">
-                  Tip: pick the background color(s) you want gone — usually
-                  white — then adjust range. Auto clean can over-erase detailed
-                  logos.
+                  Tip: pick background colors to remove (often white), then use
+                  Undo / Redo to step through changes. Auto clean can over-erase
+                  detailed logos.
                 </p>
               </div>
 
@@ -1198,7 +1469,7 @@ function LocationGlyph({id, active}) {
 
   const boxes = {
     'front-center': {x: 24, y: 26, w: 16, h: 16},
-    'left-chest': {x: 20, y: 22, w: 9, h: 9},
+    'left-chest': {x: 35, y: 22, w: 9, h: 9},
     'back-center': {x: 24, y: 26, w: 16, h: 16},
     'back-neck': {x: 28, y: 16, w: 8, h: 6},
     'left-sleeve': {x: 6, y: 28, w: 8, h: 10},

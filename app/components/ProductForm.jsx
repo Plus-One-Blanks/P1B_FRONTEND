@@ -136,6 +136,9 @@ function withDesignAttributes(lines, designAttrs) {
  *   designLineAttributes?: Array<{ key: string; value: string }> | null;
  *   requireDesign?: boolean;
  *   designReady?: boolean;
+ *   designReadyHint?: string;
+ *   onNeedDesign?: () => void;
+ *   onRequestDesign?: () => void;
  * }}
  */
 export function ProductForm({
@@ -148,10 +151,23 @@ export function ProductForm({
   designLineAttributes = null,
   requireDesign = false,
   designReady = true,
+  designReadyHint,
+  onNeedDesign,
+  onRequestDesign,
 }) {
   const navigate = useNavigate();
   const { open } = useAside();
   const [sizeQuantities, setSizeQuantities] = useState({});
+  const [showDesignHint, setShowDesignHint] = useState(false);
+
+  useEffect(() => {
+    if (designReady) setShowDesignHint(false);
+  }, [designReady]);
+
+  const promptForDesign = () => {
+    setShowDesignHint(true);
+    onNeedDesign?.();
+  };
 
   // Get product options from selected color product if available
   // getProductOptions will extract adjacentVariants from the product automatically
@@ -180,6 +196,9 @@ export function ProductForm({
   // Accessories: single OS / One Size / non-apparel label — one compact row.
   if (showFullSizeGrid) {
     const handleQuantityChange = (sizeName, quantity) => {
+      if (requireDesign && !designReady && quantity > 0) {
+        promptForDesign();
+      }
       setSizeQuantities((prev) => {
         const updated = {
           ...prev,
@@ -288,6 +307,10 @@ export function ProductForm({
           currentCartTotal={currentCartTotal}
           alwaysShowSizes={['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']}
           addToCartDisabled={designBlocksAdd}
+          onBlockedAddToCart={promptForDesign}
+          showDesignHint={showDesignHint && designBlocksAdd}
+          designReadyHint={designReadyHint}
+          onRequestDesign={onRequestDesign}
         />
       </div>
     );
@@ -320,6 +343,9 @@ export function ProductForm({
     const available = variant?.availableForSale === true;
 
     const handleOneSizeQuantityChange = (quantity) => {
+      if (requireDesign && !designReady && quantity > 0) {
+        promptForDesign();
+      }
       setSizeQuantities((prev) => {
         const updated = {
           ...prev,
@@ -377,6 +403,12 @@ export function ProductForm({
 
         <div className="one-size-selector">
           <h5 className="size-selector-title">Choose Size</h5>
+          {showDesignHint && designBlocksAdd ? (
+            <DesignRequiredHint
+              onRequestDesign={onRequestDesign}
+              message={designReadyHint}
+            />
+          ) : null}
           <div className="size-selector-grid">
             <div className="size-selector-item">
               <div className="size-label">{onlySizeLabel}</div>
@@ -410,13 +442,23 @@ export function ProductForm({
             </div>
           </div>
           <div className="one-size-add-to-cart-wrapper">
-            <AddToCartButton
-              disabled={linesForCart.length === 0 || designBlocksAdd}
-              onClick={() => open('cart')}
-              lines={linesForCart}
-            >
-              ADD TO CART
-            </AddToCartButton>
+            {designBlocksAdd ? (
+              <button
+                type="button"
+                className="product-form-blocked-atc"
+                onClick={promptForDesign}
+              >
+                ADD TO CART
+              </button>
+            ) : (
+              <AddToCartButton
+                disabled={linesForCart.length === 0}
+                onClick={() => open('cart')}
+                lines={linesForCart}
+              >
+                ADD TO CART
+              </AddToCartButton>
+            )}
           </div>
         </div>
       </div>
@@ -447,17 +489,56 @@ export function ProductForm({
           navigate={navigate}
         />
       ))}
-      <AddToCartButton
-        disabled={
-          !effectiveSelectedVariant ||
-          !effectiveSelectedVariant.availableForSale ||
-          designBlocksAdd
-        }
-        onClick={() => open('cart')}
-        lines={standardLines}
-      >
-        {effectiveSelectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
-      </AddToCartButton>
+      {showDesignHint && designBlocksAdd ? (
+        <DesignRequiredHint
+          onRequestDesign={onRequestDesign}
+          message={designReadyHint}
+        />
+      ) : null}
+      {designBlocksAdd ? (
+        <button
+          type="button"
+          className="product-form-blocked-atc"
+          onClick={promptForDesign}
+        >
+          {effectiveSelectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
+        </button>
+      ) : (
+        <AddToCartButton
+          disabled={
+            !effectiveSelectedVariant ||
+            !effectiveSelectedVariant.availableForSale
+          }
+          onClick={() => open('cart')}
+          lines={standardLines}
+        >
+          {effectiveSelectedVariant?.availableForSale ? 'Add to cart' : 'Sold out'}
+        </AddToCartButton>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Inline nudge when sizes/ATC are used before a design is saved.
+ * @param {{ onRequestDesign?: () => void; message?: string }}
+ */
+function DesignRequiredHint({ onRequestDesign, message }) {
+  return (
+    <div className="product-design-size-hint" role="status">
+      <p>
+        {message ||
+          'Please save your design in the Design Studio above before adding quantities to cart.'}
+      </p>
+      {onRequestDesign ? (
+        <button
+          type="button"
+          className="product-design-size-hint-link"
+          onClick={onRequestDesign}
+        >
+          Open design studio
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -561,6 +642,10 @@ function ProductOptionItem({ optionName, value, navigate }) {
  *   activeTier?: object | null;
  *   currentCartTotal?: number;
  *   addToCartDisabled?: boolean;
+ *   onBlockedAddToCart?: () => void;
+ *   showDesignHint?: boolean;
+ *   designReadyHint?: string;
+ *   onRequestDesign?: () => void;
  * }}
  */
 function SizeSelectorWithQuantities({
@@ -575,6 +660,10 @@ function SizeSelectorWithQuantities({
   currentCartTotal = 0,
   alwaysShowSizes = null,
   addToCartDisabled = false,
+  onBlockedAddToCart,
+  showDesignHint = false,
+  designReadyHint,
+  onRequestDesign,
 }) {
   // Helper function to find variant by size in the selected color product
   const findVariantForSize = (sizeName) => {
@@ -624,6 +713,12 @@ function SizeSelectorWithQuantities({
   return (
     <div className="size-selector-with-quantities">
       <h5 className="size-selector-title">Choose Size</h5>
+      {showDesignHint ? (
+        <DesignRequiredHint
+          onRequestDesign={onRequestDesign}
+          message={designReadyHint}
+        />
+      ) : null}
       <div className="size-selector-grid">
         {standardSizes.map((sizeName) => {
           const lookupKey = String(sizeName).trim().toLowerCase();
@@ -769,13 +864,23 @@ function SizeSelectorWithQuantities({
       </div>
       {onAddToCart && (
         <div className="size-selector-add-to-cart-wrapper">
-          <AddToCartButton
-            disabled={cartLines.length === 0 || addToCartDisabled}
-            onClick={onAddToCart}
-            lines={cartLines}
-          >
-            ADD TO CART
-          </AddToCartButton>
+          {addToCartDisabled && onBlockedAddToCart ? (
+            <button
+              type="button"
+              className="product-form-blocked-atc"
+              onClick={onBlockedAddToCart}
+            >
+              ADD TO CART
+            </button>
+          ) : (
+            <AddToCartButton
+              disabled={cartLines.length === 0 || addToCartDisabled}
+              onClick={onAddToCart}
+              lines={cartLines}
+            >
+              ADD TO CART
+            </AddToCartButton>
+          )}
         </div>
       )}
     </div>

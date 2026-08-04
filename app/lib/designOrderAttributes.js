@@ -15,7 +15,12 @@ export const DESIGN_ATTR = {
 
 /**
  * @param {import('~/lib/designStudioApi').SavedProductDesign | null | undefined} design
- * @param {{ packetBaseUrl?: string | null }} [opts]
+ * @param {{
+ *   packetBaseUrl?: string | null;
+ *   colorName?: string | null;
+ *   colorCode?: string | null;
+ *   previewUrl?: string | null;
+ * }} [opts]
  * @returns {Array<{ key: string; value: string }>}
  */
 export function buildDesignLineAttributes(design, opts = {}) {
@@ -41,6 +46,19 @@ export function buildDesignLineAttributes(design, opts = {}) {
     ? `${packetBase}/admin/design?id=${encodeURIComponent(id)}`
     : '';
 
+  const colorName =
+    opts.colorName != null && opts.colorName !== ''
+      ? opts.colorName
+      : design.colorName;
+  const colorCode =
+    opts.colorCode != null && opts.colorCode !== ''
+      ? opts.colorCode
+      : design.colorCode;
+  const previewUrl =
+    opts.previewUrl != null && opts.previewUrl !== ''
+      ? opts.previewUrl
+      : design.previewUrl;
+
   /** @type {Array<{ key: string; value: string }>} */
   const attrs = [
     {key: DESIGN_ATTR.id, value: truncateAttr(id)},
@@ -56,18 +74,18 @@ export function buildDesignLineAttributes(design, opts = {}) {
       value: truncateAttr(locationLabels),
     });
   }
-  if (design.colorName || design.colorCode) {
+  if (colorName || colorCode) {
     attrs.push({
       key: DESIGN_ATTR.color,
       value: truncateAttr(
-        design.colorName || `#${String(design.colorCode).replace(/^#/, '')}`,
+        colorName || `#${String(colorCode).replace(/^#/, '')}`,
       ),
     });
   }
-  if (design.previewUrl) {
+  if (previewUrl && !String(previewUrl).startsWith('data:')) {
     attrs.push({
       key: DESIGN_ATTR.preview,
-      value: truncateAttr(design.previewUrl),
+      value: truncateAttr(previewUrl),
     });
   }
   if (packetUrl) {
@@ -131,6 +149,16 @@ export function persistDesignSession(productHandle, design) {
       colorCode: design.colorCode || null,
       colorName: design.colorName || null,
       transform: design.transform,
+      viewMockups: (design.viewMockups || [])
+        .map((m) => ({
+          view: m.view,
+          url: m.url || null,
+          dataUrl:
+            !m.url && m.dataUrl && m.dataUrl.length < 120_000
+              ? m.dataUrl
+              : null,
+        }))
+        .filter((m) => m.url || m.dataUrl),
       locations: (design.locations || []).map((l) => ({
         id: l.id,
         label: l.label,

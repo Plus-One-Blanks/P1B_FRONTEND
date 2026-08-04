@@ -10,8 +10,8 @@ export function HomeGlobalShipping() {
           Fast in. Fast out. Worldwide.
         </h2>
         <p className="home-shipping-lede">
-          Get your blanks and DTF prints quickly with dependable fulfillment—so you can produce,
-          press, and sell without missing a beat.
+          Decorated orders and blanks ship with dependable fulfillment — so you
+          can quote timelines and keep projects moving.
         </p>
         <div className="home-shipping-map-wrap">
           <img

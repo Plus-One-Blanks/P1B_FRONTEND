@@ -423,6 +423,7 @@ export function CartLineItem({
             lineColorValue={modalColorValue}
             discountPercentage={discountPercentage}
             cart={cart ?? null}
+            designAttributes={primaryLine.attributes ?? null}
           />
         ) : null}
 

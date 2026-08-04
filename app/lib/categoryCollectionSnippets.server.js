@@ -7,6 +7,15 @@ export const CATEGORY_SNIPPET_HANDLES = {
   hats: 'hats',
 };
 
+/** Decorated parallels — `{blank-handle}-decorated` in Shopify Admin. */
+export const DECORATED_CATEGORY_SNIPPET_HANDLES = {
+  tshirts: 't-shirts-decorated',
+  sweatshirts: 'sweatshirts-decorated',
+  longSleeveTshirts: 'long-sleeve-t-shirts-decorated',
+  polos: 'polos-decorated',
+  hats: 'hats-decorated',
+};
+
 /**
  * Matches homepage `FeaturedCollection` — product snippets for featured grids.
  */
@@ -60,50 +69,34 @@ export const FEATURED_COLLECTION_QUERY = `#graphql
 `;
 
 /**
- * Homepage category rows + `/collections`: five collections plus flat product refs for sibling swatches.
  * @param {import('@shopify/hydrogen').Storefront} storefront
+ * @param {Record<string, string>} handles
  */
-export async function loadFiveCategorySnippetCollections(storefront) {
-  const h = CATEGORY_SNIPPET_HANDLES;
+async function loadSnippetCollectionsByHandles(storefront, handles) {
+  const entries = Object.entries(handles);
+  const results = await Promise.all(
+    entries.map(([, handle]) =>
+      storefront.query(FEATURED_COLLECTION_QUERY, {
+        cache: storefront.CacheLong(),
+        variables: {handle},
+      }),
+    ),
+  );
 
-  const [
-    tshirtsResult,
-    sweatshirtsResult,
-    longSleeveTshirtsResult,
-    polosResult,
-    hatsResult,
-  ] = await Promise.all([
-    storefront.query(FEATURED_COLLECTION_QUERY, {variables: {handle: h.tshirts}}),
-    storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: {handle: h.sweatshirts},
-    }),
-    storefront.query(FEATURED_COLLECTION_QUERY, {
-      variables: {handle: h.longSleeveTshirts},
-    }),
-    storefront.query(FEATURED_COLLECTION_QUERY, {variables: {handle: h.polos}}),
-    storefront.query(FEATURED_COLLECTION_QUERY, {variables: {handle: h.hats}}),
-  ]);
+  /** @type {Record<string, unknown>} */
+  const byKey = {};
+  entries.forEach(([key], i) => {
+    byKey[key] = results[i]?.collection || null;
+  });
 
-  const tshirtsCollection = tshirtsResult?.collection || null;
-  const sweatshirtsCollection = sweatshirtsResult?.collection || null;
-  const longSleeveTshirtsCollection =
-    longSleeveTshirtsResult?.collection || null;
-  const polosCollection = polosResult?.collection || null;
-  const hatsCollection = hatsResult?.collection || null;
-
-  const sectionCollections = [
-    tshirtsCollection,
-    sweatshirtsCollection,
-    longSleeveTshirtsCollection,
-    polosCollection,
-    hatsCollection,
-  ].filter(Boolean);
-
+  const sectionCollections = Object.values(byKey).filter(Boolean);
   /** @type {unknown[]} */
   const sectionProductsForSiblingColors = [];
   const seenSectionProductId = new Set();
   for (const col of sectionCollections) {
-    for (const p of col.products?.nodes ?? []) {
+    for (const p of /** @type {{ products?: { nodes?: Array<{ id?: string }> } }} */ (
+      col
+    ).products?.nodes ?? []) {
       if (p?.id && !seenSectionProductId.has(p.id)) {
         seenSectionProductId.add(p.id);
         sectionProductsForSiblingColors.push(p);
@@ -111,12 +104,44 @@ export async function loadFiveCategorySnippetCollections(storefront) {
     }
   }
 
+  return {byKey, sectionProductsForSiblingColors};
+}
+
+/**
+ * Homepage category rows + `/collections`: five collections plus flat product refs for sibling swatches.
+ * @param {import('@shopify/hydrogen').Storefront} storefront
+ */
+export async function loadFiveCategorySnippetCollections(storefront) {
+  const {byKey, sectionProductsForSiblingColors} =
+    await loadSnippetCollectionsByHandles(storefront, CATEGORY_SNIPPET_HANDLES);
+
   return {
-    tshirtsCollection,
-    sweatshirtsCollection,
-    longSleeveTshirtsCollection,
-    polosCollection,
-    hatsCollection,
+    tshirtsCollection: byKey.tshirts || null,
+    sweatshirtsCollection: byKey.sweatshirts || null,
+    longSleeveTshirtsCollection: byKey.longSleeveTshirts || null,
+    polosCollection: byKey.polos || null,
+    hatsCollection: byKey.hats || null,
+    sectionProductsForSiblingColors,
+  };
+}
+
+/**
+ * Decorated catalog snippets for the homepage (primary shop path).
+ * @param {import('@shopify/hydrogen').Storefront} storefront
+ */
+export async function loadDecoratedCategorySnippetCollections(storefront) {
+  const {byKey, sectionProductsForSiblingColors} =
+    await loadSnippetCollectionsByHandles(
+      storefront,
+      DECORATED_CATEGORY_SNIPPET_HANDLES,
+    );
+
+  return {
+    decoratedTshirtsCollection: byKey.tshirts || null,
+    decoratedSweatshirtsCollection: byKey.sweatshirts || null,
+    decoratedLongSleeveTshirtsCollection: byKey.longSleeveTshirts || null,
+    decoratedPolosCollection: byKey.polos || null,
+    decoratedHatsCollection: byKey.hats || null,
     sectionProductsForSiblingColors,
   };
 }

@@ -2,7 +2,6 @@ import {Analytics, getShopAnalytics, useNonce} from '@shopify/hydrogen';
 import {useEffect} from 'react';
 import {
   Outlet,
-  useLocation,
   useRouteError,
   isRouteErrorResponse,
   Links,
@@ -20,27 +19,30 @@ import tailwindCss from './styles/tailwind.css?url';
 import {PageLayout} from './components/PageLayout';
 
 /**
- * This is important to avoid re-fetching root queries on sub-navigations
+ * Keep root data (header, cart, footer) warm on normal link navigations.
+ * Re-running root on every click (logo → home, collections, etc.) makes SPA
+ * transitions feel sluggish because those loaders block in parallel with the
+ * destination route.
+ *
  * @type {ShouldRevalidateFunction}
  */
 export const shouldRevalidate = ({
   formMethod,
+  formAction,
   currentUrl,
   nextUrl,
-  defaultShouldRevalidate,
+  actionResult,
 }) => {
-  // revalidate when a mutation is performed e.g add to cart, login...
+  // Mutations (add to cart, login, etc.) — including `/cart` fetcher submits.
   if (formMethod && formMethod !== 'GET') return true;
+  if (formAction && /\/cart(?:$|\?)/.test(formAction)) return true;
+  if (actionResult != null) return true;
 
-  // revalidate when manually revalidating via useRevalidator
+  // Same-URL revalidation (useRevalidator / soft refresh)
   if (currentUrl.toString() === nextUrl.toString()) return true;
 
-  // Cart updates use `fetcher.submit` to `/cart`, not a document POST. In that case
-  // `formMethod` is not set here, but `defaultShouldRevalidate` is true so the root
-  // loader (and deferred `cart` in the header) can refresh after the action completes.
-  // Returning only `false` leaves `useOptimisticCart` with nothing to merge once the
-  // fetcher is idle, so the cart count badge stays at 0.
-  return defaultShouldRevalidate;
+  // Pure link navigations: reuse existing root loader data
+  return false;
 };
 
 /**
@@ -175,19 +177,6 @@ function loadDeferredData({context}) {
   };
 }
 
-/**
- * @param {{children?: React.ReactNode}}
- */
-/**
- * Keys the framework outlet so each navigation gets a fresh route subtree. Without this,
- * leaving `/cart` (DnD, optimistic cart, portaled modals) could leave the previous screen
- * painted until a full reload even when the URL had already changed.
- */
-function KeyedRootOutlet() {
-  const {key} = useLocation();
-  return <Outlet key={key} />;
-}
-
 export function Layout({children}) {
   const nonce = useNonce();
 
@@ -225,7 +214,7 @@ export default function App() {
   }, [data?.designApiUrl]);
 
   if (!data) {
-    return <KeyedRootOutlet />;
+    return <Outlet />;
   }
 
   // If analytics consent can't be built, render the app without analytics.
@@ -233,7 +222,7 @@ export default function App() {
   if (!data.consent?.checkoutDomain) {
     return (
       <PageLayout {...data}>
-        <KeyedRootOutlet />
+        <Outlet />
       </PageLayout>
     );
   }
@@ -245,7 +234,7 @@ export default function App() {
       consent={data.consent}
     >
       <PageLayout {...data}>
-        <KeyedRootOutlet />
+        <Outlet />
       </PageLayout>
     </Analytics.Provider>
   );

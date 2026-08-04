@@ -80,7 +80,7 @@ export function Header({header, isLoggedIn, cart, publicStoreDomain}) {
           </div>
           <div className="header-top-brand">
             <NavLink
-              prefetch="intent"
+              prefetch="viewport"
               to="/"
               style={activeLinkStyle}
               end
@@ -274,7 +274,7 @@ export function HeaderMenu({
         <NavLink
           end
           onClick={close}
-          prefetch="intent"
+          prefetch="viewport"
           style={activeLinkStyle}
           to="/"
         >

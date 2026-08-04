@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link, useLoaderData } from 'react-router';
-import { Image, Money } from '@shopify/hydrogen';
 import { HomeContactCta } from '~/components/HomeContactCta';
 import { HomeGlobalShipping } from '~/components/HomeGlobalShipping';
 import { OutlineButton } from '~/components/OutlineButton';
@@ -11,43 +10,35 @@ import { HomeFeaturedProductCard } from '~/components/HomeFeaturedProductCard';
 import { HomeWorkflowSpotlightProductCard } from '~/components/HomeWorkflowSpotlightProductCard';
 import { HOME_QUALITY_BRANDS } from '~/lib/featuredProductCard';
 import { buildSiblingColorDataByProductId } from '~/lib/productGroupColorData';
-import { loadFiveCategorySnippetCollections } from '~/lib/categoryCollectionSnippets.server';
+import {
+  FEATURED_COLLECTION_QUERY,
+  loadDecoratedCategorySnippetCollections,
+  loadFiveCategorySnippetCollections,
+} from '~/lib/categoryCollectionSnippets.server';
 import { ALL_PRODUCTS_COLLECTION_HANDLE } from '~/lib/searchDrawerCollection';
 import {
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
   CheckCircle2,
+  CircleMinus,
   Clock,
   DollarSign,
+  Gem,
   Layers,
   MessageCircle,
+  Palette,
   ShieldCheck,
-  Shirt,
-  ShirtIcon,
-  ShoppingBag,
-  Sun,
   Truck,
   Upload,
-  Waves,
   Zap,
-  Gem,
-  CircleMinus,
 } from 'lucide-react';
 
 /** Homepage hero carousel — Shopify Files CDN. */
 const HOME_HERO_SLIDES = [
   {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Hanging_T-Shirts.jpg?v=1775170712',
-    alt: 'Hanging blank t-shirts ready for production',
-  },
-  {
     src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Custom_T-Shirts.jpg?v=1775170712',
     alt: 'Custom printed t-shirts',
-  },
-  {
-    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Warehoused_Products.jpg?v=1775170712',
-    alt: 'Warehoused apparel and blanks inventory',
   },
   {
     src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Custom_Shirts.jpg?v=1775170712',
@@ -57,60 +48,94 @@ const HOME_HERO_SLIDES = [
     src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Embroidery_Machines.jpg?v=1775170712',
     alt: 'Embroidery machines in a production facility',
   },
+  {
+    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Hanging_T-Shirts.jpg?v=1775170712',
+    alt: 'Hanging blank t-shirts ready for production',
+  },
+  {
+    src: 'https://cdn.shopify.com/s/files/1/0687/9952/9091/files/Warehoused_Products.jpg?v=1775170712',
+    alt: 'Warehoused apparel and blanks inventory',
+  },
 ];
 
-/** Homepage featured grid — collection handle in Shopify (e.g. title “Featured Product” → `featured-product`). */
-const FEATURED_PRODUCT_COLLECTION_HANDLE = 'featured-product';
+const DECORATED_TSHIRTS_PATH = '/collections/t-shirts-decorated';
 
-/** Shopify Online Store page for DTF upload — create in Admin (Pages) or change this path. */
-const DTF_UPLOAD_PAGE_PATH = '/pages/dtf-upload';
+/** Homepage “Popular decorated styles” grid — manual sort in Shopify Admin. */
+const FEATURED_DECORATED_PRODUCT_COLLECTION_HANDLE =
+  'featured-decorated-product';
 
-/** DTF landing (collection or page) — keep in sync with `Header.jsx` primary nav. */
-const DTF_TRANSFERS_PATH = '/dtf-transfers';
+/**
+ * Shopify Admin collection used for the homepage process spotlight card.
+ * https://admin.shopify.com/store/plus-1-blanks/collections/451883663491
+ */
+const WORKFLOW_SPOTLIGHT_COLLECTION_ID = 'gid://shopify/Collection/451883663491';
+
+/** Prefer this style in the spotlight when present in the collection. */
+const WORKFLOW_SPOTLIGHT_PRODUCT_HINT = 'ls16005';
 
 /**
  * @type {Route.MetaFunction}
  */
 export const meta = () => {
-  return [{ title: 'Plus 1 Blanks | Wholesale blank apparel' }];
+  return [{ title: 'Plus 1 Blanks | Custom decorated apparel' }];
 };
 
 /**
  * @param {Route.LoaderArgs} args
  */
 export async function loader(args) {
-  // Start fetching non-critical data without blocking time to first byte
   const deferredData = loadDeferredData(args);
-
-  // Await the critical data required to render initial state of the page
   const criticalData = await loadCriticalData(args);
-
   return { ...deferredData, ...criticalData };
 }
 
 /**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  * @param {Route.LoaderArgs}
  */
 async function loadCriticalData({ context }) {
-  const [snippetBundles, featuredShowcaseResult] = await Promise.all([
-    loadFiveCategorySnippetCollections(context.storefront),
-    context.storefront.query(FEATURED_SHOWCASE_COLLECTION_QUERY, {
-      variables: { handle: FEATURED_PRODUCT_COLLECTION_HANDLE },
+  const {storefront} = context;
+  const [
+    blankSnippets,
+    decoratedSnippets,
+    spotlightResult,
+    featuredDecoratedResult,
+  ] = await Promise.all([
+    loadFiveCategorySnippetCollections(storefront),
+    loadDecoratedCategorySnippetCollections(storefront),
+    storefront.query(WORKFLOW_SPOTLIGHT_COLLECTION_QUERY, {
+      cache: storefront.CacheLong(),
+      variables: {id: WORKFLOW_SPOTLIGHT_COLLECTION_ID},
+    }),
+    storefront.query(FEATURED_COLLECTION_QUERY, {
+      cache: storefront.CacheLong(),
+      variables: {handle: FEATURED_DECORATED_PRODUCT_COLLECTION_HANDLE},
     }),
   ]);
 
-  const showcaseProducts =
-    featuredShowcaseResult?.collection?.products?.nodes ?? [];
+  const spotlightCollection = spotlightResult?.collection || null;
+  const spotlightNodes = spotlightCollection?.products?.nodes ?? [];
+  const spotlightProduct =
+    spotlightNodes.find((p) =>
+      String(p?.handle || p?.title || '')
+        .toLowerCase()
+        .includes(WORKFLOW_SPOTLIGHT_PRODUCT_HINT),
+    ) ||
+    spotlightNodes[0] ||
+    null;
 
-  const sectionProductsForSiblingColors =
-    snippetBundles.sectionProductsForSiblingColors;
+  const featuredDecoratedCollection =
+    featuredDecoratedResult?.collection ||
+    decoratedSnippets.decoratedTshirtsCollection ||
+    null;
 
-  /** One pass: featured strip + category rows share ProductID / colorCode lookups */
   const productsForSiblingColors = [];
   const seenSiblingProductId = new Set();
-  for (const p of [...showcaseProducts, ...sectionProductsForSiblingColors]) {
+  for (const p of [
+    ...(spotlightProduct ? [spotlightProduct] : []),
+    ...(featuredDecoratedCollection?.products?.nodes ?? []),
+    ...decoratedSnippets.sectionProductsForSiblingColors,
+    ...blankSnippets.sectionProductsForSiblingColors,
+  ]) {
     if (p?.id && !seenSiblingProductId.has(p.id)) {
       seenSiblingProductId.add(p.id);
       productsForSiblingColors.push(p);
@@ -122,26 +147,24 @@ async function loadCriticalData({ context }) {
   );
 
   return {
-    tshirtsCollection: snippetBundles.tshirtsCollection || null,
-    sweatshirtsCollection: snippetBundles.sweatshirtsCollection || null,
-    longSleeveTshirtsCollection:
-      snippetBundles.longSleeveTshirtsCollection || null,
-    polosCollection: snippetBundles.polosCollection || null,
-    hatsCollection: snippetBundles.hatsCollection || null,
-    /** Featured Product collection — top 5 manual order, tags/variants for swatches */
-    featuredProductShowcase: featuredShowcaseResult?.collection || null,
-    /**
-     * Per product when `ProductID:*` groups siblings: total color count + up to 8 `colorCode:` hexes.
-     * Built once for featured strip + homepage category rows (keys are Product GIDs).
-     */
+    featuredDecoratedCollection,
+    decoratedTshirtsCollection:
+      decoratedSnippets.decoratedTshirtsCollection || null,
+    decoratedSweatshirtsCollection:
+      decoratedSnippets.decoratedSweatshirtsCollection || null,
+    decoratedLongSleeveTshirtsCollection:
+      decoratedSnippets.decoratedLongSleeveTshirtsCollection || null,
+    decoratedPolosCollection:
+      decoratedSnippets.decoratedPolosCollection || null,
+    decoratedHatsCollection: decoratedSnippets.decoratedHatsCollection || null,
+    tshirtsCollection: blankSnippets.tshirtsCollection || null,
+    workflowSpotlightCollection: spotlightCollection,
+    workflowSpotlightProduct: spotlightProduct,
     productSiblingColorData,
   };
 }
 
 /**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
  * @param {Route.LoaderArgs}
  */
 function loadDeferredData() {
@@ -151,81 +174,88 @@ function loadDeferredData() {
 export default function Homepage() {
   /** @type {LoaderReturnData} */
   const data = useLoaderData();
-  const workflowTshirtSpotlight =
-    data.tshirtsCollection?.products?.nodes?.[0] ?? null;
+  const featuredDecorated =
+    data.featuredDecoratedCollection?.products?.nodes?.slice(0, 5) ?? [];
+  const workflowSpotlight = data.workflowSpotlightProduct ?? null;
 
   return (
     <div className="home">
       <HomeHero />
-      <HomeDtfFeatures />
-      {/* <HomeTickerBar /> */}
-      {(data.featuredProductShowcase || data.tshirtsCollection) && (
-        <HomeFeaturedBlanks
-          collection={data.featuredProductShowcase || data.tshirtsCollection}
-          siblingColorData={data.productSiblingColorData}
-        />
-      )}
-      <HomeWorkflow
-        spotlightProduct={workflowTshirtSpotlight}
+      <HomeDecoratedHighlights />
+      <HomeDecoratedProcess
+        spotlightProduct={workflowSpotlight}
         spotlightSiblingColor={
-          workflowTshirtSpotlight
-            ? data.productSiblingColorData?.[workflowTshirtSpotlight.id]
+          workflowSpotlight
+            ? data.productSiblingColorData?.[workflowSpotlight.id]
             : undefined
         }
+        spotlightCollectionHandle={
+          data.workflowSpotlightCollection?.handle || 't-shirts-decorated'
+        }
+        spotlightCollectionTitle={
+          data.workflowSpotlightCollection?.title || 'Decorated T-Shirts'
+        }
       />
+      {featuredDecorated.length > 0 ? (
+        <HomeFeaturedDecorated
+          products={featuredDecorated}
+          siblingColorData={data.productSiblingColorData}
+        />
+      ) : null}
       <HomeQualityBrands />
       <HomeGlobalShipping />
-      {/* <HomeStatsStrip /> */}
-      {/* <HomeBrowseCategories /> */}
       <HomeValueProps />
       <HomeContactCta />
+
       <div id="home-products" className="home-products-anchor">
-        <h2 className="home-value-title">Premium blanks, ready to go.</h2>
+        <h2 className="home-value-title">Shop decorated apparel</h2>
         <p className="home-value-lede">
-          Shop t-shirts, hoodies, and more—built for printing, pressing, and
-          selling.
+          Pick a style, open Design Studio, and we&apos;ll print your artwork —
+          no minimums, with bulk discounts as you grow.
         </p>
       </div>
-      {data.tshirtsCollection && (
+      {data.decoratedTshirtsCollection && (
         <CollectionSection
-          title="T-Shirts"
-          shopAllLabel="Shop All T-Shirts"
-          collection={data.tshirtsCollection}
+          title="Decorated T-Shirts"
+          shopAllLabel="Shop all decorated tees"
+          collection={data.decoratedTshirtsCollection}
           siblingColorDataByProductId={data.productSiblingColorData}
         />
       )}
-      {data.sweatshirtsCollection && (
+      {data.decoratedSweatshirtsCollection && (
         <CollectionSection
-          title="Sweatshirts"
-          shopAllLabel="Shop All Sweatshirts"
-          collection={data.sweatshirtsCollection}
+          title="Decorated Sweatshirts"
+          shopAllLabel="Shop all decorated sweatshirts"
+          collection={data.decoratedSweatshirtsCollection}
           siblingColorDataByProductId={data.productSiblingColorData}
         />
       )}
-      {data.longSleeveTshirtsCollection && (
+      {data.decoratedLongSleeveTshirtsCollection && (
         <CollectionSection
-          title="Long Sleeve T-Shirts"
-          shopAllLabel="Shop All Longsleeves"
-          collection={data.longSleeveTshirtsCollection}
+          title="Decorated Long Sleeves"
+          shopAllLabel="Shop all decorated longsleeves"
+          collection={data.decoratedLongSleeveTshirtsCollection}
           siblingColorDataByProductId={data.productSiblingColorData}
         />
       )}
-      {data.polosCollection && (
+      {data.decoratedPolosCollection && (
         <CollectionSection
-          title="Polos"
-          shopAllLabel="Shop All Polos"
-          collection={data.polosCollection}
+          title="Decorated Polos"
+          shopAllLabel="Shop all decorated polos"
+          collection={data.decoratedPolosCollection}
           siblingColorDataByProductId={data.productSiblingColorData}
         />
       )}
-      {data.hatsCollection && (
+      {data.decoratedHatsCollection && (
         <CollectionSection
-          title="Hats"
-          shopAllLabel="Shop All Hats"
-          collection={data.hatsCollection}
+          title="Decorated Hats"
+          shopAllLabel="Shop all decorated hats"
+          collection={data.decoratedHatsCollection}
           siblingColorDataByProductId={data.productSiblingColorData}
         />
       )}
+
+      <HomeBlanksTeaser collection={data.tshirtsCollection} />
     </div>
   );
 }
@@ -255,10 +285,10 @@ function HomeHero() {
   }, [reduceMotion, paused]);
 
   const trustItems = [
-    'Competitive wholesale pricing',
-    'Fast turnaround on in-stock orders',
     'No minimum order quantity',
-    '999+ styles across core categories',
+    'Bulk discounts as you scale',
+    'Design Studio in a few clicks',
+    'Artwork travels with your order',
   ];
 
   return (
@@ -281,28 +311,32 @@ function HomeHero() {
               ))}
             </div>
             <span className="home-hero-social-text">
-              Trusted by print shops &amp; decorators nationwide
+              Custom decorated apparel for teams, shops &amp; brands
             </span>
           </div>
 
           <h1 id="home-hero-heading" className="home-hero-title">
-            Premium blank apparel at wholesale prices
+            Custom decorated apparel, made simple
           </h1>
           <p className="home-hero-lede">
-            Stock tees, fleece, headwear, and more with straightforward pricing and
-            fulfillment built for tight production schedules.
+            Choose a garment, upload your logo in Design Studio, and check out —
+            we handle the print. No minimums, with bulk pricing when you need
+            more.
           </p>
 
           <div className="home-hero-ctas">
             <SolidButton
-              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
+              to={DECORATED_TSHIRTS_PATH}
               prefetch="intent"
               icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
             >
-              Get started
+              Shop decorated
             </SolidButton>
-            <OutlineButton to="/collections/t-shirts" prefetch="intent">
-              Explore catalog
+            <OutlineButton
+              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
+              prefetch="intent"
+            >
+              Browse blank apparel
             </OutlineButton>
           </div>
 
@@ -372,51 +406,51 @@ function HomeHero() {
   );
 }
 
-function HomeDtfFeatures() {
+function HomeDecoratedHighlights() {
   const items = [
     {
       title: '100% Quality Guaranteed',
-      body: 'We stand behind our DTF transfers. Perfect prints, free art review, and zero hidden fees.',
+      body: 'We stand behind every decorated order — clear proofs in Design Studio, solid blanks, and no surprise fees.',
       Icon: BadgeCheck,
       iconVariant: 'sky',
     },
     {
       title: 'No Minimums',
-      body: 'Order exactly what you need with no minimum quantity required for any purchase.',
+      body: 'Order exactly what you need with no minimum quantity — one piece or a full team run.',
       Icon: Layers,
       iconVariant: 'mint',
     },
     {
-      title: 'Super Fast Shipping',
-      body: 'Lightning-fast production and reliable delivery mean your DTF transfers can arrive as soon as next day.',
+      title: 'Super Fast Turnaround',
+      body: 'In-stock garments move quickly from design to production so you can hit tight timelines.',
       Icon: Zap,
       iconVariant: 'butter',
     },
     {
-      title: 'Unmatched Color & Detail',
-      body: 'Our VIVID AF DTF transfers produce up to 16.7 million colors with stunning detail and vibrancy.',
-      Icon: Sun,
+      title: 'Bulk Discounts',
+      body: 'Tiered pricing kicks in as quantities grow, so bigger decorated runs cost less per piece.',
+      Icon: DollarSign,
       iconVariant: 'lilac',
     },
     {
-      title: 'Works with a Heatpress, Iron, or Cricut',
-      body: 'Achieve smooth, professional results with our easy press-and-peel application process.',
-      Icon: Waves,
+      title: 'Easy Design Studio',
+      body: 'Upload your logo, place it on the garment, and preview before you buy — all in the browser.',
+      Icon: Palette,
       iconVariant: 'blush',
     },
     {
-      title: 'Lab-Tested Durability',
-      body: 'Our DTF transfers are tested to last 100+ washes without fading, cracking, or peeling.',
+      title: 'Production-Ready Files',
+      body: 'Your artwork and placements travel with the order so print locations stay clear for the shop floor.',
       Icon: ShieldCheck,
       iconVariant: 'seafoam',
     },
   ];
 
   return (
-    <section className="home-dtf" aria-labelledby="home-dtf-heading">
+    <section className="home-dtf" aria-labelledby="home-highlights-heading">
       <div className="home-dtf-inner">
-        <h2 id="home-dtf-heading" className="home-dtf-title">
-          High-Quality DTF Transfers. No Compromises.
+        <h2 id="home-highlights-heading" className="home-dtf-title">
+          High-Quality Decorated Apparel. No Compromises.
         </h2>
         <ul className="home-dtf-grid">
           {items.map(({ title, body, Icon, iconVariant }) => (
@@ -436,60 +470,12 @@ function HomeDtfFeatures() {
         </ul>
         <div className="home-dtf-cta">
           <SolidButton
-            to={DTF_TRANSFERS_PATH}
+            to={DECORATED_TSHIRTS_PATH}
             prefetch="intent"
             icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
           >
-            Get DTF transfers
+            Get decorated goods
           </SolidButton>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HomeTickerBar() {
-  const items = [
-    { icon: ShoppingBag, text: 'No minimums or upfront costs' },
-    { icon: Truck, text: 'Dropshipping' },
-    { icon: DollarSign, text: 'Threads that turn heads' },
-    { icon: Shirt, text: 'Custom T-shirts' },
-    { icon: ShirtIcon, text: 'Custom hoodies' },
-    { icon: MessageCircle, text: 'Clothing manufacturer' },
-    { icon: CheckCircle2, text: 'USA fulfillment' },
-  ];
-
-  // Duplicate the list for a seamless loop.
-  const doubledItems = [...items, ...items];
-
-  return (
-    <section className="home-ticker" aria-label="Store highlights">
-      <div className="home-ticker-outer">
-        <div className="home-ticker-track" aria-hidden>
-          <div className="home-ticker-group">
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.text} className="home-ticker-item">
-                  <Icon className="home-ticker-icon" size={16} strokeWidth={2} aria-hidden />
-                  <span className="home-ticker-text">{item.text}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="home-ticker-group">
-            {doubledItems
-              .slice(items.length)
-              .map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.text} className="home-ticker-item">
-                    <Icon className="home-ticker-icon" size={16} strokeWidth={2} aria-hidden />
-                    <span className="home-ticker-text">{item.text}</span>
-                  </div>
-                );
-              })}
-          </div>
         </div>
       </div>
     </section>
@@ -500,54 +486,72 @@ function HomeTickerBar() {
  * @param {{
  *   spotlightProduct: import('storefrontapi.generated').ProductItemFragment | null;
  *   spotlightSiblingColor?: { count: number; swatchHexes: string[] };
+ *   spotlightCollectionHandle?: string;
+ *   spotlightCollectionTitle?: string;
  * }}
  */
-function HomeWorkflow({ spotlightProduct, spotlightSiblingColor }) {
+function HomeDecoratedProcess({
+  spotlightProduct,
+  spotlightSiblingColor,
+  spotlightCollectionHandle = 't-shirts-decorated',
+  spotlightCollectionTitle = 'Decorated T-Shirts',
+}) {
   const steps = [
     {
       num: '01',
-      title: 'Choose your blanks',
-      body: 'Shop wholesale t-shirts, hoodies, fleece, and more—stock what your customers and jobs need.',
+      title: 'Pick your garment',
+      body: 'Shop decorated tees, fleece, polos, and hats — the same brands customers already trust.',
     },
     {
       num: '02',
-      title: 'Order your DTF',
-      body: 'Upload your artwork and get custom heat transfers made to order—built for your press.',
+      title: 'Open Design Studio',
+      body: 'One click on the product page launches the studio — no separate apps or email threads.',
     },
     {
       num: '03',
-      title: 'Buy from one distributor',
-      body: 'Blanks and transfers on the same order path—fewer vendors, invoices, and pickups.',
+      title: 'Upload & place your art',
+      body: 'Drop in your logo, clean the background if you need, and place it on chest, back, or more.',
     },
     {
       num: '04',
-      title: 'Receive & run',
-      body: 'Get inventory and DTF delivered—ready to heat press, stock the shelf, or ship to your client.',
+      title: 'Choose sizes & colors',
+      body: 'Add quantities across sizes. No minimums — bulk discounts apply as your order grows.',
+    },
+    {
+      num: '05',
+      title: 'Checkout — we print',
+      body: 'Your design files travel with the order. We decorate and ship so you can stay focused.',
     },
   ];
 
+  const shopAllPath = `/collections/${spotlightCollectionHandle}`;
+  const categoryLabel = String(spotlightCollectionTitle || '')
+    .replace(/\s*decorated\s*$/i, '')
+    .trim()
+    .toLowerCase();
+
   return (
-    <section className="home-workflow" aria-labelledby="home-workflow-heading">
+    <section className="home-workflow" aria-labelledby="home-process-heading">
       <div className="home-workflow-inner">
         <div className="home-workflow-grid">
           <div className="home-workflow-copy">
-            <h2 id="home-workflow-heading" className="home-workflow-title">
-              Your blanks. Your prints. Shipped fast.
+            <h2 id="home-process-heading" className="home-workflow-title">
+              Your design. Our print. Shipped fast.
             </h2>
             <div className="home-workflow-ctas">
               <SolidButton
-                to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
+                to={DECORATED_TSHIRTS_PATH}
                 prefetch="intent"
                 icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
               >
-                Shop Blanks
+                Shop decorated
               </SolidButton>
               <OutlineButton
-                to={DTF_UPLOAD_PAGE_PATH}
+                to={shopAllPath}
                 prefetch="intent"
                 icon={<Upload className="button-icon" size={18} aria-hidden />}
               >
-                Upload DTF
+                Start designing
               </OutlineButton>
             </div>
             <ol className="home-workflow-steps">
@@ -564,38 +568,35 @@ function HomeWorkflow({ spotlightProduct, spotlightSiblingColor }) {
           </div>
           <div className="home-workflow-visual">
             <div className="home-workflow-visual-card">
-              <p className="home-workflow-visual-eyebrow">Blanks & DTF</p>
-              <p className="home-workflow-visual-lede">
-                We are focused on wholesale apparel and custom transfers—distribution and
-                selling first—so sourcing stays simple while you grow the shop.
-              </p>
+              <div className="home-workflow-visual-copy">
+                <p className="home-workflow-visual-eyebrow">Decorated apparel</p>
+                <p className="home-workflow-visual-lede">
+                  Design in the browser, preview on the blank, then check out —
+                  no minimums, bulk pricing as you scale.
+                </p>
+              </div>
               {spotlightProduct ? (
                 <>
-                  <p className="home-workflow-spotlight-label">
-                    From our t-shirts category
-                  </p>
-                  <div className="home-featured-grid home-workflow-spotlight-grid">
-                    <HomeWorkflowSpotlightProductCard
-                      product={spotlightProduct}
-                      siblingColorData={spotlightSiblingColor}
-                      imageLoading="eager"
-                    />
-                  </div>
+                  <HomeWorkflowSpotlightProductCard
+                    product={spotlightProduct}
+                    siblingColorData={spotlightSiblingColor}
+                    imageLoading="eager"
+                  />
                   <TextIconLink
-                    to="/collections/t-shirts"
+                    to={shopAllPath}
                     className="collection-section-shop-link home-workflow-spotlight-link"
                     prefetch="intent"
                   >
-                    Shop all t-shirts
+                    Shop all {categoryLabel || 'decorated styles'}
                   </TextIconLink>
                 </>
               ) : (
                 <TextIconLink
-                  to="/collections/t-shirts"
+                  to={DECORATED_TSHIRTS_PATH}
                   className="collection-section-shop-link home-workflow-spotlight-link"
                   prefetch="intent"
                 >
-                  Browse t-shirts
+                  Browse decorated tees
                 </TextIconLink>
               )}
             </div>
@@ -607,8 +608,73 @@ function HomeWorkflow({ spotlightProduct, spotlightSiblingColor }) {
 }
 
 /**
- * Brands shown in `HomeQualityBrands` (one-row marquee). Full `HOME_QUALITY_BRANDS` is still used
- * for product-card logos (includes American Apparel, Realtree, Shaka Wear, etc.).
+ * @param {{
+ *   products: Array<import('storefrontapi.generated').ProductItemFragment>;
+ *   siblingColorData?: Record<string, { count: number; swatchHexes: string[] }>;
+ * }}
+ */
+function HomeFeaturedDecorated({ products, siblingColorData }) {
+  const pills = [
+    { to: '/collections/t-shirts-decorated', label: 'T-Shirts' },
+    { to: '/collections/sweatshirts-decorated', label: 'Sweatshirts' },
+    { to: '/collections/polos-decorated', label: 'Polos' },
+    { to: '/collections/hats-decorated', label: 'Hats' },
+  ];
+
+  return (
+    <section className="home-featured" aria-labelledby="home-featured-heading">
+      <div className="home-featured-inner">
+        <header className="home-featured-header">
+          <h2 id="home-featured-heading" className="home-featured-title">
+            Popular decorated styles, ready for your logo
+          </h2>
+          <p className="home-featured-sub">
+            High-quality apparel with Design Studio built in — upload your artwork,
+            place it on the garment, and order with no minimums. Bulk discounts kick
+            in as your run grows, so teams and shops can start small and scale cleanly.
+          </p>
+        </header>
+        <nav className="home-featured-pills" aria-label="Decorated categories">
+          <div className="home-featured-pills-row">
+            {pills.map((p) => (
+              <OutlineButton
+                key={p.to}
+                to={p.to}
+                prefetch="intent"
+                compact
+                icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
+              >
+                {p.label}
+              </OutlineButton>
+            ))}
+            <SolidButton
+              to={DECORATED_TSHIRTS_PATH}
+              prefetch="intent"
+              compact
+              icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
+            >
+              Browse decorated catalog
+            </SolidButton>
+          </div>
+        </nav>
+      </div>
+      <div className="home-featured-grid-bleed">
+        <div className="home-featured-grid">
+          {products.map((product) => (
+            <HomeFeaturedProductCard
+              key={product.id}
+              product={product}
+              siblingColorData={siblingColorData?.[product.id]}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Brands shown in `HomeQualityBrands` (one-row marquee).
  */
 const HOME_QUALITY_BRANDS_SHOWCASE_ALTS = new Set([
   'Lane Seven',
@@ -636,17 +702,18 @@ function HomeQualityBrands() {
         <div className="home-brands-panel">
           <div className="home-brands-copy">
             <h2 id="home-brands-heading" className="home-brands-title">
-              Shop Quality Blanks
+              Brands customers already trust
             </h2>
             <p className="home-brands-lede">
-              From everyday staples to premium fleece—we carry the brands decorators trust, so you can stock and price with confidence.
+              Decorate on Comfort Colors, Gildan, Bella + Canvas, and more — the
+              same quality blanks shops quote every day.
             </p>
             <SolidButton
-              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
+              to={DECORATED_TSHIRTS_PATH}
               prefetch="intent"
               icon={<ArrowRight className="button-icon" size={18} aria-hidden />}
             >
-              Shop all brands
+              Shop decorated brands
             </SolidButton>
           </div>
           <div
@@ -705,154 +772,23 @@ function HomeQualityBrands() {
   );
 }
 
-/**
- * @param {{
- *   collection: FeaturedCollectionFragment;
- *   siblingColorData?: Record<string, { count: number; swatchHexes: string[] }>;
- * }}
- */
-function HomeFeaturedBlanks({ collection, siblingColorData }) {
-  if (!collection?.products?.nodes?.length) return null;
-
-  const products = collection.products.nodes.slice(0, 5);
-  const pills = [
-    { to: '/collections/t-shirts', label: 'T-Shirts' },
-    { to: '/collections/hoodies', label: 'Hoodies' },
-    { to: '/collections/sweatshirts', label: 'Sweatshirts' },
-    { to: '/collections/long-sleeve-t-shirts', label: 'Long sleeve' },
-  ];
-
-  return (
-    <section className="home-featured" aria-labelledby="home-featured-heading">
-      <div className="home-featured-inner">
-        <header className="home-featured-header">
-          <h2 id="home-featured-heading" className="home-featured-title">
-            Premium wholesale blanks, ready for your vision
-          </h2>
-          <p className="home-featured-sub">
-            High-quality blank apparel with straightforward pricing—your canvas for
-            decoration, printing, and retail.
-          </p>
-        </header>
-        <nav className="home-featured-pills" aria-label="Browse categories">
-          <div className="home-featured-pills-row">
-            {pills.slice(0, 3).map((p) => (
-              <OutlineButton
-                key={p.to}
-                to={p.to}
-                prefetch="intent"
-                compact
-                icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
-              >
-                {p.label}
-              </OutlineButton>
-            ))}
-          </div>
-          <div className="home-featured-pills-row">
-            {pills.slice(3).map((p) => (
-              <OutlineButton
-                key={p.to}
-                to={p.to}
-                prefetch="intent"
-                compact
-                icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
-              >
-                {p.label}
-              </OutlineButton>
-            ))}
-            <SolidButton
-              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
-              prefetch="intent"
-              compact
-              icon={<ArrowUpRight className="button-icon" size={16} aria-hidden />}
-            >
-              Browse full catalog
-            </SolidButton>
-          </div>
-        </nav>
-      </div>
-      <div className="home-featured-grid-bleed">
-        <div className="home-featured-grid">
-          {products.map((product) => (
-            <HomeFeaturedProductCard
-              key={product.id}
-              product={product}
-              siblingColorData={siblingColorData?.[product.id]}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HomeStatsStrip() {
-  const items = [
-    { label: 'Wholesale pricing', detail: 'Margins you can build on' },
-    { label: 'Fast turnaround', detail: 'In-stock orders ship quickly' },
-    { label: 'No minimum order quantity', detail: 'Order what you need' },
-    { label: '999+ styles', detail: 'Core blanks & seasonal drops' },
-  ];
-  return (
-    <section className="home-stats" aria-label="At a glance">
-      <ul className="home-stats-list">
-        {items.map((item) => (
-          <li key={item.label} className="home-stats-item">
-            <span className="home-stats-label">{item.label}</span>
-            <span className="home-stats-detail">{item.detail}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function HomeBrowseCategories() {
-  const links = [
-    { to: '/collections/t-shirts', label: 'T-Shirts', Icon: Shirt },
-    { to: '/collections/sweatshirts', label: 'Sweatshirts', Icon: ShirtIcon },
-    { to: '/collections/hoodies', label: 'Hoodies', Icon: ShirtIcon },
-    { to: '/collections/blank-accessories', label: 'Accessories', Icon: ShoppingBag },
-  ];
-  return (
-    <section className="home-categories" aria-labelledby="home-categories-heading">
-      <div className="home-categories-header">
-        <h2 id="home-categories-heading" className="home-section-title">
-          Browse by category
-        </h2>
-        <p className="home-section-sub">
-          Jump straight into the blanks you need—same great pricing across the board.
-        </p>
-      </div>
-      <div className="home-categories-grid">
-        {links.map(({ to, label, Icon }) => (
-          <Link key={to} to={to} className="home-category-card" prefetch="intent">
-            <Icon className="home-category-icon" size={26} aria-hidden />
-            <span className="home-category-label">{label}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function HomeValueProps() {
   const cards = [
     {
-      title: 'Pricing that competes',
-      body: 'Wholesale rates structured so you can quote jobs confidently and protect your margin on every order.',
+      title: 'No minimums, real bulk pricing',
+      body: 'Start with a single decorated piece when you need to. Volume discounts step in as your order grows.',
       Icon: DollarSign,
       iconVariant: 'sky',
     },
     {
-      title: 'Turnaround you can plan around',
-      body: 'In-stock items move fast—so you can hit production dates and keep your clients happy.',
+      title: 'Clear from design to ship',
+      body: 'Design Studio captures placement and files so production knows exactly what to print.',
       Icon: Truck,
       iconVariant: 'mint',
     },
     {
-      title: 'Real humans when you need them',
-      body: "Can't find a color, size run, or brand line? Reach out—we'll help you source it or point you to the closest match.",
+      title: 'Help when you need it',
+      body: "Can't find a color, size run, or brand line? Reach out — we'll help you source it or point you to the closest match.",
       Icon: MessageCircle,
       iconVariant: 'lilac',
     },
@@ -861,10 +797,10 @@ function HomeValueProps() {
     <section className="home-value" aria-labelledby="home-value-heading">
       <div className="home-value-inner">
         <h2 id="home-value-heading" className="home-value-title">
-          Why shops buy from us
+          Why teams order decorated here
         </h2>
         <p className="home-value-lede">
-          Less friction from cart to production—so you can focus on the work that pays.
+          Less back-and-forth from mockup to carton — so you can focus on the work that pays.
         </p>
         <ul className="home-value-grid">
           {cards.map(({ title, body, Icon, iconVariant }) => (
@@ -887,11 +823,59 @@ function HomeValueProps() {
           <div className="home-value-footnote">
             <Clock size={18} aria-hidden />
             <span>
-              Order timing and cutoffs can vary by SKU—see product pages or ask us for your
-              project timeline.
+              Turnaround can vary by decoration method and quantity — check the
+              product page or ask us for your project timeline.
             </span>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Secondary path for customers who only need undecorated blanks.
+ * @param {{ collection: FeaturedCollectionFragment | null }}
+ */
+function HomeBlanksTeaser({ collection }) {
+  const products = collection?.products?.nodes?.slice(0, 4) ?? [];
+
+  return (
+    <section className="home-blanks-teaser" aria-labelledby="home-blanks-teaser-heading">
+      <div className="home-blanks-teaser-inner">
+        <div className="home-blanks-teaser-copy">
+          <p className="home-blanks-teaser-eyebrow">Also available</p>
+          <h2 id="home-blanks-teaser-heading" className="home-blanks-teaser-title">
+            Need undecorated blanks?
+          </h2>
+          <p className="home-blanks-teaser-lede">
+            Same catalog, undecorated — for shops that print or embroider in-house.
+          </p>
+          <div className="home-blanks-teaser-ctas">
+            <OutlineButton
+              to={`/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`}
+              prefetch="intent"
+            >
+              Shop blank apparel
+            </OutlineButton>
+            {collection?.handle ? (
+              <TextIconLink
+                to={`/collections/${collection.handle}`}
+                className="collection-section-shop-link"
+                prefetch="intent"
+              >
+                Browse blank t-shirts
+              </TextIconLink>
+            ) : null}
+          </div>
+        </div>
+        {products.length > 0 ? (
+          <div className="home-featured-grid home-blanks-teaser-grid">
+            {products.map((product) => (
+              <HomeFeaturedProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -964,9 +948,8 @@ export function CollectionBanner({ collection }) {
   );
 }
 
-/** Top 5 from the featured collection (manual sort), tags + variants for swatches. */
-const FEATURED_SHOWCASE_COLLECTION_QUERY = `#graphql
-  fragment ProductItem on Product {
+const WORKFLOW_SPOTLIGHT_COLLECTION_QUERY = `#graphql
+  fragment WorkflowSpotlightProduct on Product {
     id
     handle
     title
@@ -991,9 +974,6 @@ const FEATURED_SHOWCASE_COLLECTION_QUERY = `#graphql
       name
       values
     }
-  }
-  fragment ProductShowcase on Product {
-    ...ProductItem
     variants(first: 250) {
       nodes {
         selectedOptions {
@@ -1003,23 +983,20 @@ const FEATURED_SHOWCASE_COLLECTION_QUERY = `#graphql
       }
     }
   }
-  fragment ShowcaseCollection on Collection {
-    id
-    title
-    handle
-    products(first: 5, sortKey: MANUAL) {
-      nodes {
-        ...ProductShowcase
-      }
-    }
-  }
-  query FeaturedShowcaseCollection(
-    $handle: String!
+  query WorkflowSpotlightCollection(
+    $id: ID!
     $country: CountryCode
     $language: LanguageCode
   ) @inContext(country: $country, language: $language) {
-    collection(handle: $handle) {
-      ...ShowcaseCollection
+    collection(id: $id) {
+      id
+      handle
+      title
+      products(first: 24, sortKey: MANUAL) {
+        nodes {
+          ...WorkflowSpotlightProduct
+        }
+      }
     }
   }
 `;

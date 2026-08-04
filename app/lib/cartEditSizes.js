@@ -62,6 +62,8 @@ export function findColorInLineAttributes(attributes) {
   const hit = attributes.find((a) => {
     const k = (a.key ?? '').toLowerCase().trim();
     if (!k) return false;
+    // Design Studio metadata — not the blank's cart color option
+    if (k === 'garment color' || k.startsWith('_design')) return false;
     if (k === 'color' || k === 'colour' || k === 'colors' || k === 'colours') {
       return true;
     }

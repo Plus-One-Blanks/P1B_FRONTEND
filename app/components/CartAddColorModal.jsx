@@ -26,6 +26,7 @@ import {CartModalSubmitBusyLayer} from '~/components/CartModalSubmitBusyLayer';
  *   lineColorValue: string;
  *   discountPercentage: number;
  *   cart: import('storefrontapi.generated').CartApiQueryFragment | null;
+ *   designAttributes?: Array<{ key?: string | null; value?: string | null }> | null;
  * }} props
  */
 export function CartAddColorModal({
@@ -36,6 +37,7 @@ export function CartAddColorModal({
   lineColorValue,
   discountPercentage,
   cart,
+  designAttributes = null,
 }) {
   const titleId = useId();
   const colorDropdownTriggerId = useId();
@@ -310,8 +312,42 @@ export function CartAddColorModal({
       return {variantId: v.id, quantity, lineId};
     });
 
+    /** @type {Array<{ key: string; value: string }> | undefined} */
+    let lineAttributes;
+    if (designAttributes?.length) {
+      const garmentColor =
+        (usesSiblingColors
+          ? fetcher.data?.selectedColorName ||
+            String(fetcher.data?.productTitle || '')
+              .split(/[-–—]/)
+              .pop()
+              ?.trim()
+          : activeColorValue) || activeColorValue;
+      lineAttributes = designAttributes
+        .filter((a) => a?.key && a?.value != null && String(a.value).length)
+        .map((a) => {
+          const key = String(a.key);
+          if (key === 'Garment color') {
+            return {
+              key,
+              value: String(garmentColor || a.value).slice(0, 250),
+            };
+          }
+          // Skip mockup baked for a different blank — cart shows product image instead
+          if (key === '_designPreview') return null;
+          return {key, value: String(a.value).slice(0, 250)};
+        })
+        .filter(Boolean);
+    }
+
     const fd = new FormData();
-    fd.set('payload', JSON.stringify({changes}));
+    fd.set(
+      'payload',
+      JSON.stringify({
+        changes,
+        ...(lineAttributes?.length ? {attributes: lineAttributes} : {}),
+      }),
+    );
 
     void submitFetcher.submit(fd, {
       method: 'POST',
@@ -323,6 +359,9 @@ export function CartAddColorModal({
     variantToLineId,
     submitFetcher,
     resourcePath,
+    designAttributes,
+    usesSiblingColors,
+    activeColorValue,
   ]);
 
   if (!open) return null;

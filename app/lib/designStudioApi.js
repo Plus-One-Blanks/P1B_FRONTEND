@@ -77,6 +77,75 @@ export async function removeLogoBackground(dataUrl) {
 }
 
 /**
+ * Build a mockup that matches the Design Studio stage:
+ * square canvas, garment drawn with object-fit:contain, logo using the same
+ * left/top/width % + translate(-50%,-50%) + rotate as the studio CSS.
+ *
+ * @param {{
+ *   garmentUrl?: string | null;
+ *   logos?: Array<{
+ *     logoDataUrl: string;
+ *     transform?: { x: number; y: number; scale: number; rotation: number };
+ *   }>;
+ *   size?: number;
+ * }} opts
+ * @returns {Promise<string | null>}
+ */
+export async function composeStageExactPreview(opts) {
+  if (typeof document === 'undefined') return null;
+  const garmentUrl = opts.garmentUrl;
+  const logos = (opts.logos || []).filter((l) => l?.logoDataUrl);
+  const size = Math.max(400, Math.round(opts.size || 1000));
+  if (!garmentUrl || !logos.length) return null;
+
+  try {
+    const garment = await loadHtmlImageCrossOrigin(garmentUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+
+    const gw = garment.naturalWidth || garment.width || size;
+    const gh = garment.naturalHeight || garment.height || size;
+    const fit = Math.min(size / gw, size / gh);
+    const dw = gw * fit;
+    const dh = gh * fit;
+    const ox = (size - dw) / 2;
+    const oy = (size - dh) / 2;
+    ctx.drawImage(garment, ox, oy, dw, dh);
+
+    for (const loc of logos) {
+      const logoSrc = loc.logoDataUrl;
+      const logo = /^https?:/i.test(logoSrc)
+        ? await loadHtmlImageCrossOrigin(logoSrc)
+        : await loadHtmlImage(logoSrc);
+      const t = loc.transform || DEFAULT_DESIGN_TRANSFORM;
+      const lw = Math.max(8, size * (t.scale || 0.32));
+      const lh =
+        (logo.naturalHeight / Math.max(1, logo.naturalWidth)) * lw;
+      const cx = size * (t.x ?? 0.5);
+      const cy = size * (t.y ?? 0.36);
+      const rot = ((t.rotation || 0) * Math.PI) / 180;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.drawImage(logo, -lw / 2, -lh / 2, lw, lh);
+      ctx.restore();
+    }
+
+    return canvas.toDataURL('image/png', 0.92);
+  } catch (err) {
+    console.warn('[designStudio] stage-exact preview failed', err);
+    return null;
+  }
+}
+
+/**
  * Persist design via Cloud Function (optional).
  * @param {Record<string, unknown>} payload
  */
@@ -125,9 +194,7 @@ export function getDesignApiBaseUrl() {
 }
 
 /**
- * Build a flat mockup PNG (garment + logos) for cart/order preview.
- * Failures return null — save still works with logo-only preview.
- *
+ * @deprecated Prefer composeStageExactPreview — kept as a thin wrapper.
  * @param {{
  *   garmentUrl?: string | null;
  *   locations?: Array<{
@@ -138,45 +205,303 @@ export function getDesignApiBaseUrl() {
  * @returns {Promise<string | null>}
  */
 export async function composeDesignPreview(opts) {
-  if (typeof document === 'undefined') return null;
-  const garmentUrl = opts.garmentUrl;
-  const locations = (opts.locations || []).filter((l) => l?.logoDataUrl);
-  if (!garmentUrl || !locations.length) return null;
+  return composeStageExactPreview({
+    garmentUrl: opts.garmentUrl,
+    logos: opts.locations,
+    size: 1000,
+  });
+}
+
+/**
+ * Normalize a color code for comparison (# optional, case-insensitive).
+ * @param {string | null | undefined} code
+ */
+export function normalizeColorCode(code) {
+  return String(code || '')
+    .replace(/^#/, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Re-bake front/back/side mockups onto a different blank color's photos.
+ * Uses local logo data URLs when present; otherwise loads logos from the
+ * remote design packet.
+ *
+ * @param {SavedProductDesign | null | undefined} design
+ * @param {Array<{ url?: string; altText?: string | null } | null | undefined> | null | undefined} garmentImages
+ * @returns {Promise<DesignViewMockup[]>}
+ */
+export async function rebuildDesignViewMockups(design, garmentImages) {
+  if (!design || typeof document === 'undefined') return [];
+
+  const {
+    garmentViewForLocation,
+    pickGarmentViewImage,
+    LOCATION_CATALOG,
+  } = await import('~/components/DesignStudio/designStudioLocations');
+
+  const locations = await resolveDesignLocationsForCompose(design);
+  if (!locations.length) return [];
+
+  const imagePool = (garmentImages || []).filter((img) => img?.url);
+  /** @type {Record<string, typeof locations>} */
+  const logosByView = {};
+  for (const loc of locations) {
+    const view = garmentViewForLocation(LOCATION_CATALOG[loc.id]);
+    if (!logosByView[view]) logosByView[view] = [];
+    logosByView[view].push(loc);
+  }
+
+  /** @type {DesignViewMockup[]} */
+  const viewMockups = [];
+  for (const view of /** @type {Array<'front'|'back'|'side'>} */ ([
+    'front',
+    'back',
+    'side',
+  ])) {
+    const logos = logosByView[view];
+    if (!logos?.length) continue;
+    const garment = pickGarmentViewImage(imagePool, view) || imagePool[0];
+    if (!garment?.url) continue;
+    try {
+      const dataUrl = await composeStageExactPreview({
+        garmentUrl: garment.url,
+        logos,
+        size: 1000,
+      });
+      if (dataUrl) viewMockups.push({view, dataUrl, url: null});
+    } catch {
+      // continue other views
+    }
+  }
+
+  return viewMockups;
+}
+
+/**
+ * After the customer switches blank color: re-bake mockups and upload a hosted
+ * preview so cart/order attributes get a real image (not a grey placeholder).
+ *
+ * Tries an in-place design update first; falls back to a full re-save (new ID)
+ * which works even before the designId API is deployed.
+ *
+ * @param {{
+ *   design: SavedProductDesign;
+ *   colorCode?: string | null;
+ *   colorName?: string | null;
+ *   garmentImages?: Array<{ url?: string; altText?: string | null } | null | undefined> | null;
+ * }} opts
+ * @returns {Promise<SavedProductDesign>}
+ */
+export async function syncDesignMockupsForColor(opts) {
+  const design = opts.design;
+  if (!design?.remoteId) return design;
+
+  const viewMockups = await rebuildDesignViewMockups(
+    design,
+    opts.garmentImages || [],
+  );
+  if (!viewMockups.length) {
+    throw new Error(
+      'Could not build a mockup for this blank color. Try again in a moment.',
+    );
+  }
+
+  const previewBase64 = viewMockups[0].dataUrl;
+  const colorCode = opts.colorCode ?? design.colorCode;
+  const colorName = opts.colorName ?? design.colorName;
+
+  // 1) Prefer updating the existing design packet (needs deployed API support)
+  try {
+    const updated = await saveDesignRemote({
+      designId: design.remoteId,
+      colorCode,
+      colorName,
+      previewBase64,
+      viewMockups: viewMockups.map((m) => ({
+        view: m.view,
+        imageBase64: m.dataUrl,
+      })),
+    });
+    if (updated?.previewUrl && !String(updated.previewUrl).startsWith('data:')) {
+      return {
+        ...design,
+        remoteId: String(updated.id || design.remoteId),
+        colorCode,
+        colorName,
+        previewUrl: String(updated.previewUrl),
+        viewMockups: Array.isArray(updated.viewMockups) && updated.viewMockups.length
+          ? updated.viewMockups.map((m) => ({
+              view: m.view,
+              url: m.url || null,
+              dataUrl: null,
+            }))
+          : viewMockups,
+      };
+    }
+  } catch {
+    // Older API — fall through to full re-save
+  }
+
+  // 2) Full re-save with artwork + new mockups (works on current production API)
+  const locations = await resolveDesignLocationsAsBase64(design);
+  if (!locations.length) {
+    throw new Error(
+      'Could not load artwork to save this color’s mockup. Re-open Design Studio and save once, then switch colors.',
+    );
+  }
+
+  const primary = locations[0];
+  const created = await saveDesignRemote({
+    productHandle: design.productHandle || null,
+    productId: design.productId || null,
+    colorCode,
+    colorName,
+    printStyle: design.printStyle || null,
+    transform: primary.transform || design.transform || DEFAULT_DESIGN_TRANSFORM,
+    logoBase64: primary.logoDataUrl,
+    locations: locations.map((l) => ({
+      id: l.id,
+      label: l.label,
+      transform: l.transform,
+      logoBase64: l.logoDataUrl,
+    })),
+    previewBase64,
+    viewMockups: viewMockups.map((m) => ({
+      view: m.view,
+      imageBase64: m.dataUrl,
+    })),
+  });
+
+  if (!created?.id || !created?.previewUrl) {
+    throw new Error('Design API did not return a preview for this color.');
+  }
+
+  return {
+    ...design,
+    remoteId: String(created.id),
+    colorCode,
+    colorName,
+    previewUrl: String(created.previewUrl),
+    // Keep local logo data so further color switches don’t need a round-trip
+    locations: locations.map((l) => ({
+      id: l.id,
+      label: l.label,
+      logoDataUrl: l.logoDataUrl,
+      transform: l.transform || DEFAULT_DESIGN_TRANSFORM,
+    })),
+    logoDataUrl: primary.logoDataUrl,
+    viewMockups: Array.isArray(created.viewMockups) && created.viewMockups.length
+      ? created.viewMockups.map((m) => ({
+          view: m.view,
+          url: m.url || null,
+          dataUrl: null,
+        }))
+      : viewMockups,
+  };
+}
+
+/**
+ * @param {SavedProductDesign} design
+ * @returns {Promise<Array<{ id: string; label?: string; logoDataUrl: string; transform: typeof DEFAULT_DESIGN_TRANSFORM }>>}
+ */
+async function resolveDesignLocationsForCompose(design) {
+  /** @type {Array<{ id: string; label?: string; logoDataUrl: string; transform: typeof DEFAULT_DESIGN_TRANSFORM }>} */
+  let locations = (design.locations || [])
+    .filter((l) => l?.logoDataUrl)
+    .map((l) => ({
+      id: l.id,
+      label: l.label,
+      logoDataUrl: l.logoDataUrl,
+      transform: l.transform || DEFAULT_DESIGN_TRANSFORM,
+    }));
+
+  if (!locations.length && design.logoDataUrl) {
+    locations = [
+      {
+        id: 'primary',
+        logoDataUrl: design.logoDataUrl,
+        transform: design.transform || DEFAULT_DESIGN_TRANSFORM,
+      },
+    ];
+  }
+
+  if (!locations.length && design.remoteId) {
+    try {
+      const remote = await getDesignRemote(design.remoteId);
+      const remoteLocs = Array.isArray(remote?.locations)
+        ? remote.locations
+        : [];
+      locations = remoteLocs
+        .filter((l) => l?.logoUrl)
+        .map((l) => ({
+          id: String(l.id || 'location'),
+          label: l.label ? String(l.label) : undefined,
+          logoDataUrl: String(l.logoUrl),
+          transform: /** @type {typeof DEFAULT_DESIGN_TRANSFORM} */ (
+            l.transform || DEFAULT_DESIGN_TRANSFORM
+          ),
+        }));
+      if (!locations.length && remote?.logoUrl) {
+        locations = [
+          {
+            id: 'primary',
+            logoDataUrl: String(remote.logoUrl),
+            transform: /** @type {typeof DEFAULT_DESIGN_TRANSFORM} */ (
+              remote.transform || DEFAULT_DESIGN_TRANSFORM
+            ),
+          },
+        ];
+      }
+    } catch (err) {
+      console.warn('[designStudio] could not load logos for mockup rebuild', err);
+    }
+  }
+
+  return locations;
+}
+
+/**
+ * Same as compose locations, but forces data-URL / base64 payloads for saveDesign.
+ * @param {SavedProductDesign} design
+ */
+async function resolveDesignLocationsAsBase64(design) {
+  const locations = await resolveDesignLocationsForCompose(design);
+  const out = [];
+  for (const loc of locations) {
+    try {
+      const logoDataUrl = await imageSrcToDataUrl(loc.logoDataUrl);
+      out.push({...loc, logoDataUrl});
+    } catch (err) {
+      console.warn('[designStudio] could not encode logo for re-save', err);
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {string} src
+ * @returns {Promise<string>}
+ */
+async function imageSrcToDataUrl(src) {
+  if (!src) throw new Error('Missing image');
+  if (String(src).startsWith('data:')) return String(src);
 
   try {
-    const garment = await loadHtmlImageCrossOrigin(garmentUrl);
-    const width = garment.naturalWidth || garment.width || 1000;
-    const height = garment.naturalHeight || garment.height || 1200;
+    const img = await loadHtmlImageCrossOrigin(src);
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(garment, 0, 0, width, height);
-
-    for (const loc of locations) {
-      const logo = await loadHtmlImage(loc.logoDataUrl);
-      const t = loc.transform || DEFAULT_DESIGN_TRANSFORM;
-      const lw = Math.max(8, width * (t.scale || 0.32));
-      const lh = (logo.naturalHeight / Math.max(1, logo.naturalWidth)) * lw;
-      const cx = width * (t.x ?? 0.5);
-      const cy = height * (t.y ?? 0.36);
-      const rot = ((t.rotation || 0) * Math.PI) / 180;
-
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(rot);
-      ctx.drawImage(logo, -lw / 2, -lh / 2, lw, lh);
-      ctx.restore();
-    }
-
-    return canvas.toDataURL('image/png', 0.92);
-  } catch (err) {
-    console.warn('[designStudio] compose preview failed', err);
-    return null;
+    if (!ctx) throw new Error('Canvas unavailable');
+    ctx.drawImage(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  } catch {
+    const res = await fetch(src, {mode: 'cors'});
+    if (!res.ok) throw new Error('Could not fetch artwork');
+    const blob = await res.blob();
+    return blobToDataUrl(blob);
   }
 }
 
@@ -350,6 +675,12 @@ export const DEFAULT_DESIGN_TRANSFORM = {
  * }} DesignLocationArt
  *
  * @typedef {{
+ *   view: 'front' | 'back' | 'side';
+ *   url?: string | null;
+ *   dataUrl?: string | null;
+ * }} DesignViewMockup
+ *
+ * @typedef {{
  *   id?: string | null;
  *   logoDataUrl: string;
  *   transform: typeof DEFAULT_DESIGN_TRANSFORM;
@@ -361,5 +692,6 @@ export const DEFAULT_DESIGN_TRANSFORM = {
  *   colorName?: string | null;
  *   previewUrl?: string | null;
  *   remoteId?: string | null;
+ *   viewMockups?: DesignViewMockup[];
  * }} SavedProductDesign
  */

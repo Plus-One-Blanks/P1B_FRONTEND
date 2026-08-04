@@ -127,7 +127,7 @@ function MobileMenuLogo({shopName}) {
   return (
     <Link
       to="/"
-      prefetch="intent"
+      prefetch="viewport"
       className="header-logo-link"
       onClick={close}
     >
