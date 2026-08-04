@@ -41,6 +41,10 @@ export const CUSTOMER_ORDER_QUERY = `#graphql
       width
     }
     variantTitle
+    customAttributes {
+      key
+      value
+    }
   }
   fragment Order on Order {
     id

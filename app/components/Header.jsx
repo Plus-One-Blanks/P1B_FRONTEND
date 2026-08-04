@@ -260,13 +260,7 @@ export function HeaderMenu({
 }) {
   const className = `header-menu-${viewport}`;
   const {close} = useAside();
-  const {pathname} = useLocation();
-  const [openId, setOpenId] = useState(() => {
-    const match = HEADER_PRIMARY_NAV.find((g) =>
-      g.children.some((c) => pathMatchesCollection(pathname, c.url)),
-    );
-    return match?.id || 'blank';
-  });
+  const [openId, setOpenId] = useState(/** @type {string | null} */ (null));
 
   const links = (
     <>

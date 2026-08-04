@@ -16,6 +16,10 @@ import { ProductForm } from '~/components/ProductForm';
 import { ProductItem } from '~/components/ProductItem';
 import { BulkPricingTiers, getActiveTier } from '~/components/BulkPricingTiers';
 import { redirectIfHandleIsLocalized } from '~/lib/redirect';
+import {
+  fetchAllRelatedProductsByProductId,
+  fulfillmentScopeFromTags,
+} from '~/lib/relatedColorProducts';
 
 /**
  * @type {Route.MetaFunction}
@@ -114,15 +118,13 @@ function loadDeferredData({ context, params, request }) {
         return { products: { nodes: [] } };
       }
 
-      // Search for all products with the same ProductID tag
-      const searchTerm = `tag:ProductID:${productId}`;
-
-      return storefront.query(RELATED_PRODUCTS_QUERY, {
-        variables: {
-          query: searchTerm,
-          first: 100, // Get up to 100 products
-        },
-      });
+      // Paginate siblings — blank + decorated often share ProductID and exceed one page
+      const fulfillment = fulfillmentScopeFromTags(currentProduct.tags);
+      return fetchAllRelatedProductsByProductId(
+        storefront,
+        RELATED_PRODUCTS_QUERY,
+        {productId, fulfillment},
+      );
     })
     .then((result) => {
       // Ensure we return the result even if nodes is empty
@@ -1539,10 +1541,18 @@ const RELATED_PRODUCTS_QUERY = `#graphql
       ...ProductVariant
     }
   }
-  query RelatedProducts($query: String!, $first: Int!) {
-    products(first: $first, query: $query) {
+  query RelatedProducts(
+    $query: String!
+    $first: Int!
+    $after: String
+  ) {
+    products(first: $first, after: $after, query: $query) {
       nodes {
         ...RelatedProduct
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }

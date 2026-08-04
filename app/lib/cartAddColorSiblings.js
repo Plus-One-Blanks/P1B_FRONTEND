@@ -1,4 +1,8 @@
 import {extractProductGroupTag} from '~/lib/productGroupColorData';
+import {
+  buildSiblingProductSearchQuery,
+  fulfillmentScopeFromTags,
+} from '~/lib/relatedColorProducts';
 
 /**
  * @param {string | null | undefined} s
@@ -80,10 +84,11 @@ const CART_ADD_COLOR_SIBLINGS = `#graphql
   query CartAddColorSiblings(
     $query: String!
     $first: Int!
+    $after: String
     $country: CountryCode
     $language: LanguageCode
   ) @inContext(country: $country, language: $language) {
-    products(first: $first, query: $query) {
+    products(first: $first, after: $after, query: $query) {
       nodes {
         handle
         tags
@@ -100,6 +105,10 @@ const CART_ADD_COLOR_SIBLINGS = `#graphql
           }
         }
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 `;
@@ -113,15 +122,30 @@ export async function fetchSiblingProductNodesForAddColor(storefront, tags) {
   if (!tag) return [];
   const productId = String(tag).replace(/^ProductID:\s*/i, '').trim();
   if (!productId) return [];
-  const query = `tag:ProductID:${productId}`;
+  const fulfillment = fulfillmentScopeFromTags(tags);
+  const query = buildSiblingProductSearchQuery(productId, fulfillment);
+  /** @type {any[]} */
+  const nodes = [];
+  /** @type {string | null} */
+  let after = null;
+  let hasNext = true;
+  const maxPages = 10;
+
   try {
-    const {products, errors} = await storefront.query(CART_ADD_COLOR_SIBLINGS, {
-      variables: {query, first: 100},
-    });
-    if (errors?.length) {
-      console.error('cart-add-color siblings:', errors);
+    for (let page = 0; page < maxPages && hasNext; page++) {
+      const {products, errors} = await storefront.query(CART_ADD_COLOR_SIBLINGS, {
+        variables: {query, first: 100, after},
+      });
+      if (errors?.length) {
+        console.error('cart-add-color siblings:', errors);
+      }
+      const pageNodes = products?.nodes ?? [];
+      nodes.push(...pageNodes);
+      hasNext = Boolean(products?.pageInfo?.hasNextPage);
+      after = products?.pageInfo?.endCursor ?? null;
+      if (!pageNodes.length) break;
     }
-    return products?.nodes ?? [];
+    return nodes;
   } catch (e) {
     console.error('cart-add-color siblings fetch:', e);
     return [];

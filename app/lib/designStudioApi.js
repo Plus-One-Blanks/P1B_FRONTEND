@@ -78,8 +78,9 @@ export async function removeLogoBackground(dataUrl) {
 
 /**
  * Build a mockup that matches the Design Studio stage:
- * square canvas, garment drawn with object-fit:contain, logo using the same
- * left/top/width % + translate(-50%,-50%) + rotate as the studio CSS.
+ * square canvas, garment drawn with object-fit:contain, logo placed in the
+ * garment fit-box using the same % coords as `.design-studio-fit-layer`
+ * (left/top/width % + translate(-50%,-50%) + rotate).
  *
  * @param {{
  *   garmentUrl?: string | null;
@@ -124,11 +125,13 @@ export async function composeStageExactPreview(opts) {
         ? await loadHtmlImageCrossOrigin(logoSrc)
         : await loadHtmlImage(logoSrc);
       const t = loc.transform || DEFAULT_DESIGN_TRANSFORM;
-      const lw = Math.max(8, size * (t.scale || 0.32));
+      // Transforms are % of the object-fit garment box (same as .design-studio-fit-layer),
+      // not the full square canvas — otherwise letterboxing shifts/scales the art.
+      const lw = Math.max(8, dw * (t.scale || 0.32));
       const lh =
         (logo.naturalHeight / Math.max(1, logo.naturalWidth)) * lw;
-      const cx = size * (t.x ?? 0.5);
-      const cy = size * (t.y ?? 0.36);
+      const cx = ox + dw * (t.x ?? 0.5);
+      const cy = oy + dh * (t.y ?? 0.36);
       const rot = ((t.rotation || 0) * Math.PI) / 180;
 
       ctx.save();
@@ -183,6 +186,81 @@ export async function getDesignRemote(designId) {
   }
   const json = await res.json();
   return json.design || null;
+}
+
+/**
+ * Map a Firestore / getDesign packet into the storefront SavedProductDesign shape
+ * used by Design Studio + ATC attributes.
+ *
+ * @param {Record<string, unknown> | null | undefined} remote
+ * @returns {SavedProductDesign | null}
+ */
+export function remoteDesignToSaved(remote) {
+  if (!remote || typeof remote !== 'object') return null;
+  const id = remote.id != null ? String(remote.id) : null;
+  if (!id) return null;
+
+  const locationsIn = Array.isArray(remote.locations) ? remote.locations : [];
+  const locations = locationsIn.map((loc, i) => {
+    const l = /** @type {Record<string, unknown>} */ (loc || {});
+    return {
+      id: String(l.id || `loc-${i + 1}`),
+      label: l.label != null ? String(l.label) : undefined,
+      transform:
+        l.transform && typeof l.transform === 'object'
+          ? /** @type {typeof DEFAULT_DESIGN_TRANSFORM} */ (l.transform)
+          : undefined,
+      // Prefer hosted logo URL as logoDataUrl so studio/reorder can render art
+      logoDataUrl:
+        (typeof l.logoUrl === 'string' && l.logoUrl) ||
+        (typeof l.logoDataUrl === 'string' && l.logoDataUrl) ||
+        undefined,
+    };
+  });
+
+  const viewMockupsIn = Array.isArray(remote.viewMockups)
+    ? remote.viewMockups
+    : [];
+  const viewMockups = viewMockupsIn
+    .map((m) => {
+      const vm = /** @type {Record<string, unknown>} */ (m || {});
+      if (!vm.view) return null;
+      return {
+        view: /** @type {'front'|'back'|'side'|string} */ (String(vm.view)),
+        url: typeof vm.url === 'string' ? vm.url : null,
+        dataUrl: null,
+      };
+    })
+    .filter(Boolean);
+
+  const printStyleRaw = remote.printStyle;
+  /** @type {'simple' | 'full' | undefined} */
+  let printStyle;
+  if (printStyleRaw === 'simple' || printStyleRaw === 'full') {
+    printStyle = printStyleRaw;
+  }
+
+  return {
+    remoteId: id,
+    logoDataUrl:
+      (typeof remote.logoUrl === 'string' && remote.logoUrl) ||
+      (typeof remote.logoDataUrl === 'string' && remote.logoDataUrl) ||
+      '',
+    transform:
+      remote.transform && typeof remote.transform === 'object'
+        ? /** @type {typeof DEFAULT_DESIGN_TRANSFORM} */ (remote.transform)
+        : undefined,
+    locations,
+    printStyle,
+    productHandle:
+      typeof remote.productHandle === 'string' ? remote.productHandle : null,
+    productId: typeof remote.productId === 'string' ? remote.productId : null,
+    colorCode: typeof remote.colorCode === 'string' ? remote.colorCode : null,
+    colorName: typeof remote.colorName === 'string' ? remote.colorName : null,
+    previewUrl:
+      typeof remote.previewUrl === 'string' ? remote.previewUrl : null,
+    viewMockups: /** @type {DesignViewMockup[]} */ (viewMockups),
+  };
 }
 
 /**
@@ -661,8 +739,8 @@ function clampInt(n, min, max) {
  */
 export const DEFAULT_DESIGN_TRANSFORM = {
   x: 0.5,
-  y: 0.36,
-  scale: 0.32,
+  y: 0.44,
+  scale: 0.36,
   rotation: 0,
 };
 

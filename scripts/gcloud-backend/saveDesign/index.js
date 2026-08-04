@@ -231,6 +231,10 @@ module.exports = createHttpFunction({
       locations: locationRecords,
       status: 'saved',
       source: 'design-studio',
+      customerEmail: body.customerEmail
+        ? String(body.customerEmail).toLowerCase().trim()
+        : null,
+      customerId: body.customerId ? String(body.customerId) : null,
     });
 
     res.json({design});

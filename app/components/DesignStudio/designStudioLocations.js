@@ -21,7 +21,8 @@ export const LOCATION_CATALOG = {
     label: 'Front center',
     group: 'front',
     description: 'Full chest imprint',
-    transform: {x: 0.5, y: 0.42, scale: 0.36, rotation: 0},
+    // Mid-chest on flat-lay; % of garment image (not letterboxed stage)
+    transform: {x: 0.5, y: 0.44, scale: 0.36, rotation: 0},
   },
   'left-chest': {
     id: 'left-chest',
@@ -29,49 +30,49 @@ export const LOCATION_CATALOG = {
     group: 'front',
     description: 'Small logo placement',
     // Wearer's left chest on a front flat — inset from sleeve, below collar
-    transform: {x: 0.62, y: 0.37, scale: 0.12, rotation: 0},
+    transform: {x: 0.64, y: 0.38, scale: 0.15, rotation: 0},
   },
   'back-center': {
     id: 'back-center',
     label: 'Back center',
     group: 'back',
     description: 'Main back print',
-    transform: {x: 0.5, y: 0.42, scale: 0.4, rotation: 0},
+    transform: {x: 0.5, y: 0.44, scale: 0.4, rotation: 0},
   },
   'back-neck': {
     id: 'back-neck',
     label: 'Nape / neck',
     group: 'back',
     description: 'Small mark below collar',
-    transform: {x: 0.5, y: 0.22, scale: 0.1, rotation: 0},
+    transform: {x: 0.5, y: 0.24, scale: 0.13, rotation: 0},
   },
   'left-sleeve': {
     id: 'left-sleeve',
     label: 'Left sleeve',
     group: 'sleeve',
     description: 'Outer left sleeve',
-    transform: {x: 0.16, y: 0.46, scale: 0.12, rotation: 0},
+    transform: {x: 0.14, y: 0.48, scale: 0.14, rotation: 0},
   },
   'right-sleeve': {
     id: 'right-sleeve',
     label: 'Right sleeve',
     group: 'sleeve',
     description: 'Outer right sleeve',
-    transform: {x: 0.84, y: 0.46, scale: 0.12, rotation: 0},
+    transform: {x: 0.86, y: 0.48, scale: 0.14, rotation: 0},
   },
   'hat-front': {
     id: 'hat-front',
     label: 'Front panel',
     group: 'hat',
     description: 'Center front of cap',
-    transform: {x: 0.5, y: 0.42, scale: 0.28, rotation: 0},
+    transform: {x: 0.5, y: 0.46, scale: 0.32, rotation: 0},
   },
   'hat-side': {
     id: 'hat-side',
     label: 'Side',
     group: 'hat',
     description: 'Side panel mark',
-    transform: {x: 0.28, y: 0.48, scale: 0.14, rotation: 0},
+    transform: {x: 0.28, y: 0.5, scale: 0.16, rotation: 0},
   },
 };
 
@@ -218,8 +219,8 @@ function scoreImageForView(img, view) {
 
 const DEFAULT_TRANSFORM_FALLBACK = {
   x: 0.5,
-  y: 0.36,
-  scale: 0.32,
+  y: 0.44,
+  scale: 0.36,
   rotation: 0,
 };
 

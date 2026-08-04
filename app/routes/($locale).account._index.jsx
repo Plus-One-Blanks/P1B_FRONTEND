@@ -1,14 +1,24 @@
 import { Link, redirect, useLoaderData, useOutletContext } from 'react-router';
-import { ArrowRight, Image, LayoutGrid, Shirt } from 'lucide-react';
+import { ArrowRight, Shirt, Sparkles, Wand2 } from 'lucide-react';
 import { Money, getPaginationVariables } from '@shopify/hydrogen';
 import { CUSTOMER_ORDERS_QUERY } from '~/graphql/customer-account/CustomerOrdersQuery';
+import { CUSTOMER_DESIGN_ORDERS_QUERY } from '~/graphql/customer-account/CustomerDesignOrdersQuery';
 import { SolidButton } from '~/components/SolidButton';
+import { OutlineButton } from '~/components/OutlineButton';
+import { AccountDesignCard } from '~/components/AccountDesignCard';
 import { ALL_PRODUCTS_COLLECTION_HANDLE } from '~/lib/searchDrawerCollection';
 import {
   guardCustomerAccountAuth,
   serializeCustomerAccountErrors,
 } from '~/lib/customerAccountAuth';
 import {toBase64} from '~/lib/base64';
+import {
+  ACCOUNT_DESIGN_ORDERS_SCAN,
+  ACCOUNT_DESIGNS_LIMIT,
+  buildMockAccountDesigns,
+  collectDesignsFromOrders,
+  enrichAccountDesigns,
+} from '~/lib/accountDesigns.server';
 
 /**
  * @type {Route.MetaFunction}
@@ -17,10 +27,10 @@ export const meta = () => {
   return [{ title: 'Account' }];
 };
 
-const DTF_UPLOAD_PAGE_PATH = '/pages/dtf-upload';
-const DTF_TRANSFERS_PATH = '/dtf-transfers';
 /** Orders shown on the dashboard “Recent orders” block (already sorted newest first). */
 const DASHBOARD_ORDERS_LIMIT = 6;
+const DECORATED_GOODS_COLLECTION_HANDLE = 't-shirts-decorated';
+const DECORATED_HATS_COLLECTION_HANDLE = 'hats-decorated';
 
 function isDevPreview(request, context) {
   const url = new URL(request.url);
@@ -78,11 +88,12 @@ export async function loader({ request, context }) {
     return {
       preview: true,
       recentOrders: buildMockRecentOrders(),
+      designs: buildMockAccountDesigns(),
       previewQuery,
     };
   }
 
-  const { customerAccount } = context;
+  const { customerAccount, env } = context;
 
   const authRedirect = await guardCustomerAccountAuth(customerAccount);
   if (authRedirect) {
@@ -93,13 +104,23 @@ export async function loader({ request, context }) {
     pageBy: DASHBOARD_ORDERS_LIMIT,
   });
 
-  const { data, errors } = await customerAccount.query(CUSTOMER_ORDERS_QUERY, {
-    variables: {
-      ...paginationVariables,
-      query: undefined,
-      language: customerAccount.i18n.language,
-    },
-  });
+  const [ordersResult, designOrdersResult] = await Promise.all([
+    customerAccount.query(CUSTOMER_ORDERS_QUERY, {
+      variables: {
+        ...paginationVariables,
+        query: undefined,
+        language: customerAccount.i18n.language,
+      },
+    }),
+    customerAccount.query(CUSTOMER_DESIGN_ORDERS_QUERY, {
+      variables: {
+        first: ACCOUNT_DESIGN_ORDERS_SCAN,
+        language: customerAccount.i18n.language,
+      },
+    }),
+  ]);
+
+  const { data, errors } = ordersResult;
 
   if (errors?.length || !data?.customer) {
     console.error('[account dashboard loader] CUSTOMER_ORDERS_QUERY failed', {
@@ -112,9 +133,27 @@ export async function loader({ request, context }) {
   const allNodes = data.customer.orders?.nodes ?? [];
   const recentNodes = allNodes.slice(0, DASHBOARD_ORDERS_LIMIT);
 
+  let designs = [];
+  if (designOrdersResult?.errors?.length) {
+    console.warn(
+      '[account dashboard] CUSTOMER_DESIGN_ORDERS_QUERY failed',
+      serializeCustomerAccountErrors(designOrdersResult.errors),
+    );
+  } else {
+    const designOrderNodes =
+      designOrdersResult?.data?.customer?.orders?.nodes ?? [];
+    const collected = collectDesignsFromOrders(designOrderNodes);
+    designs = await enrichAccountDesigns(
+      collected,
+      env?.PUBLIC_DESIGN_API_URL,
+      {limit: ACCOUNT_DESIGNS_LIMIT},
+    );
+  }
+
   return {
     preview: false,
     recentOrders: { nodes: recentNodes },
+    designs,
     previewQuery: '',
   };
 }
@@ -131,8 +170,8 @@ function orderPath(orderId, previewQuery) {
  * @typedef {{customer: import('customer-accountapi.generated').CustomerDetailsQuery['customer'] | null}} AccountOutletContext
  */
 export default function AccountDashboard() {
-  /** @type {{preview: boolean; recentOrders: {nodes: import('customer-accountapi.generated').OrderItemFragment[]}; previewQuery: string}} */
-  const { recentOrders, previewQuery } = useLoaderData();
+  /** @type {{preview: boolean; recentOrders: {nodes: import('customer-accountapi.generated').OrderItemFragment[]}; designs: import('~/lib/accountDesigns.server').AccountDesignSummary[]; previewQuery: string}} */
+  const { recentOrders, designs = [], previewQuery } = useLoaderData();
   /** @type {AccountOutletContext} */
   const { customer } = useOutletContext();
   const nodes = recentOrders?.nodes ?? [];
@@ -146,6 +185,8 @@ export default function AccountDashboard() {
     : null;
 
   const allProductsPath = `/collections/${ALL_PRODUCTS_COLLECTION_HANDLE}`;
+  const decoratedGoodsPath = `/collections/${DECORATED_GOODS_COLLECTION_HANDLE}`;
+  const decoratedHatsPath = `/collections/${DECORATED_HATS_COLLECTION_HANDLE}`;
 
   return (
     <div className="account-dashboard">
@@ -154,22 +195,22 @@ export default function AccountDashboard() {
           <div className="account-dashboard-action-card account-dashboard-action-card--sky">
             <div className="account-dashboard-action-top">
               <span className="account-dashboard-action-icon" aria-hidden>
-                <Image size={22} strokeWidth={1.6} />
+                <Wand2 size={22} strokeWidth={1.6} />
               </span>
               <div>
-                <p className="account-dashboard-action-title">Order DTF by size</p>
+                <p className="account-dashboard-action-title">Decorated goods</p>
                 <p className="account-dashboard-action-sub">
-                  Upload and pick what size best fits your needs
+                  Custom print apparel with Design Studio — tees and more
                 </p>
               </div>
             </div>
             <SolidButton
-              href={DTF_UPLOAD_PAGE_PATH}
+              to={decoratedGoodsPath}
               compact
               variant="pastel-sky"
               className="account-dashboard-action-cta"
             >
-              Order
+              Shop
             </SolidButton>
           </div>
         </li>
@@ -177,21 +218,21 @@ export default function AccountDashboard() {
           <div className="account-dashboard-action-card account-dashboard-action-card--neutral">
             <div className="account-dashboard-action-top">
               <span className="account-dashboard-action-icon" aria-hidden>
-                <LayoutGrid size={22} strokeWidth={1.6} />
+                <Sparkles size={22} strokeWidth={1.6} />
               </span>
               <div>
-                <p className="account-dashboard-action-title">Build a gang sheet</p>
+                <p className="account-dashboard-action-title">Decorated hats</p>
                 <p className="account-dashboard-action-sub">
-                  Fill your sheet and maximize savings
+                  Caps and hats ready for your logo or artwork
                 </p>
               </div>
             </div>
             <SolidButton
-              to={DTF_TRANSFERS_PATH}
+              to={decoratedHatsPath}
               compact
               className="account-dashboard-action-cta"
             >
-              Build
+              Shop
             </SolidButton>
           </div>
         </li>
@@ -202,9 +243,9 @@ export default function AccountDashboard() {
                 <Shirt size={22} strokeWidth={1.6} />
               </span>
               <div>
-                <p className="account-dashboard-action-title">Blank apparel</p>
+                <p className="account-dashboard-action-title">Blank goods</p>
                 <p className="account-dashboard-action-sub">
-                  Browse T-Shirts, Hoodies, and other goods that fit your needs
+                  Undecorated blanks for in-house print and embroidery
                 </p>
               </div>
             </div>
@@ -218,6 +259,49 @@ export default function AccountDashboard() {
           </div>
         </li>
       </ul>
+
+      <section
+        className="account-dashboard-section"
+        aria-labelledby="dash-designs-heading"
+      >
+        <div className="account-dashboard-section-head">
+          <div>
+            <h2 id="dash-designs-heading" className="account-dashboard-section-title">
+              Your designs
+            </h2>
+            <p className="account-dashboard-section-meta">
+              Artwork from your decorated orders — reorder anytime
+            </p>
+          </div>
+          <Link
+            to={`/account/designs${previewQuery}`}
+            className="account-dashboard-section-link"
+          >
+            View all designs →
+          </Link>
+        </div>
+
+        {designs.length ? (
+          <ul className="account-designs-grid">
+            {designs.map((design) => (
+              <li key={design.id}>
+                <AccountDesignCard design={design} previewQuery={previewQuery} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="account-dashboard-panel account-designs-empty">
+            <p className="account-designs-empty-title">No saved designs yet</p>
+            <p className="account-designs-empty-copy">
+              When you order decorated apparel, your Design Studio artwork shows
+              up here so you can reorder the same look.
+            </p>
+            <OutlineButton to="/collections/t-shirts-decorated" prefetch="intent">
+              Shop decorated apparel
+            </OutlineButton>
+          </div>
+        )}
+      </section>
 
       <section className="account-dashboard-section" aria-labelledby="dash-recent-orders-heading">
         <div className="account-dashboard-section-head">

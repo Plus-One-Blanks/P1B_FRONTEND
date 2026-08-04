@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Suspense } from 'react';
-import { useLoaderData, Await, useFetcher, redirect } from 'react-router';
+import {
+  useLoaderData,
+  Await,
+  useFetcher,
+  redirect,
+  useSearchParams,
+} from 'react-router';
 import {
   getSelectedProductOptions,
   Analytics,
@@ -29,10 +35,16 @@ import {
 } from '~/lib/designOrderAttributes';
 import {
   getDesignApiBaseUrl,
+  getDesignRemote,
   normalizeColorCode,
+  remoteDesignToSaved,
   syncDesignMockupsForColor,
 } from '~/lib/designStudioApi';
-import { Wand2 } from 'lucide-react';
+import {
+  fetchAllRelatedProductsByProductId,
+  fulfillmentScopeFromTags,
+} from '~/lib/relatedColorProducts';
+import { Wand2, Trash2 } from 'lucide-react';
 
 /**
  * @type {Route.MetaFunction}
@@ -139,15 +151,15 @@ function loadDeferredData({ context, params, request }) {
         return { products: { nodes: [] } };
       }
 
-      // Search for all products with the same ProductID tag
-      const searchTerm = `tag:ProductID:${productId}`;
-
-      return storefront.query(RELATED_PRODUCTS_QUERY, {
-        variables: {
-          query: searchTerm,
-          first: 100, // Get up to 100 products
-        },
-      });
+      // Search for all products with the same ProductID tag (paginated —
+      // one ProductID can exceed Storefront's single-page `first` cap when
+      // blank + decorated siblings share the tag).
+      const fulfillment = fulfillmentScopeFromTags(currentProduct.tags);
+      return fetchAllRelatedProductsByProductId(
+        storefront,
+        RELATED_PRODUCTS_QUERY,
+        {productId, fulfillment},
+      );
     })
     .then((result) => {
       // Ensure we return the result even if nodes is empty
@@ -196,6 +208,7 @@ export default function Product() {
   );
   const [designCtaAttention, setDesignCtaAttention] = useState(false);
   const designCtaRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const productMediaRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   /** @type {['idle' | 'syncing' | 'error', Function]} */
   const [mockupSyncStatus, setMockupSyncStatus] = useState(
     /** @type {'idle' | 'syncing' | 'error'} */ ('idle'),
@@ -204,6 +217,18 @@ export default function Product() {
     /** @type {string | null} */ (null),
   );
   const [mockupSyncRetry, setMockupSyncRetry] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const designIdFromUrl = searchParams.get('design');
+  const [designRestoreStatus, setDesignRestoreStatus] = useState(
+    /** @type {'idle' | 'loading' | 'ready' | 'error'} */ (
+      designIdFromUrl ? 'loading' : 'idle'
+    ),
+  );
+  const [confirmClearDesign, setConfirmClearDesign] = useState(false);
+  /** Bumped on clear so an in-flight ?design= restore cannot re-apply. */
+  const designRestoreGenRef = useRef(0);
+  /** Skip persist(null) on first paint so we don't wipe session before restore. */
+  const designSessionReadyRef = useRef(false);
 
   const nudgeDesignStudio = () => {
     setDesignCtaAttention(true);
@@ -213,15 +238,166 @@ export default function Product() {
     });
   };
 
-  // Restore design packet from this tab if the customer refreshed mid-flow
+  const handleDesignSaved = (design) => {
+    setSavedDesign(design);
+    setDesignStudioOpen(false);
+    // After save, bring the garment + mockup into view (esp. mobile where
+    // Design Studio was opened from the customize block further down).
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        productMediaRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 120);
+    });
+  };
+
+  const clearSavedDesign = () => {
+    designRestoreGenRef.current += 1;
+    setSavedDesign(null);
+    persistDesignSession(product.handle, null);
+    setDesignRestoreStatus('idle');
+    setMockupSyncStatus('idle');
+    setMockupSyncError(null);
+    setDesignCtaAttention(false);
+    setConfirmClearDesign(false);
+    setDesignStudioOpen(false);
+    if (searchParams.has('design')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('design');
+      setSearchParams(next, {replace: true});
+    }
+  };
+
+  // Restore design packet from this tab if the customer refreshed mid-flow.
+  // Session storage is slim (no huge data URLs) — rehydrate from the API when
+  // we have a remoteId but no mockups/logos left to show.
   useEffect(() => {
     if (!product?.handle) return;
-    const restored = loadDesignSession(product.handle);
-    if (restored) setSavedDesign(restored);
-  }, [product?.handle]);
+    if (designIdFromUrl) return; // URL reorder takes priority
+    let cancelled = false;
+    const gen = designRestoreGenRef.current;
+
+    (async () => {
+      const restored = loadDesignSession(product.handle);
+      if (!restored) {
+        designSessionReadyRef.current = true;
+        return;
+      }
+
+      const hasMockup = (restored.viewMockups || []).some(
+        (m) => m?.url || m?.dataUrl,
+      );
+      const hasLogo =
+        Boolean(restored.logoDataUrl) ||
+        (restored.locations || []).some((l) => l?.logoDataUrl);
+      const needsRemote =
+        Boolean(restored.remoteId) && (!hasMockup || !hasLogo);
+
+      if (needsRemote) {
+        setDesignRestoreStatus('loading');
+        try {
+          const remote = await getDesignRemote(restored.remoteId);
+          if (cancelled || gen !== designRestoreGenRef.current) return;
+          const saved = remoteDesignToSaved(remote);
+          if (saved?.remoteId) {
+            saved.productHandle = product.handle;
+            if (!saved.colorCode && restored.colorCode) {
+              saved.colorCode = restored.colorCode;
+            }
+            if (!saved.colorName && restored.colorName) {
+              saved.colorName = restored.colorName;
+            }
+            setSavedDesign(saved);
+            setDesignRestoreStatus('ready');
+          } else {
+            setSavedDesign(restored);
+            setDesignRestoreStatus('ready');
+          }
+        } catch (err) {
+          console.warn('[decorated PDP] session rehydrate failed', err);
+          if (!cancelled && gen === designRestoreGenRef.current) {
+            setSavedDesign(restored);
+            setDesignRestoreStatus('ready');
+          }
+        }
+      } else {
+        setSavedDesign(restored);
+        setDesignRestoreStatus('ready');
+      }
+
+      if (!cancelled) designSessionReadyRef.current = true;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.handle, designIdFromUrl]);
+
+  // Account "Reorder" deep link: ?design=<uuid>
+  useEffect(() => {
+    if (!designIdFromUrl || !product?.handle) return;
+    let cancelled = false;
+    const gen = designRestoreGenRef.current;
+
+    (async () => {
+      setDesignRestoreStatus('loading');
+      try {
+        const remote = await getDesignRemote(designIdFromUrl);
+        if (cancelled || gen !== designRestoreGenRef.current) return;
+        const saved = remoteDesignToSaved(remote);
+        if (!saved?.remoteId) {
+          setDesignRestoreStatus('error');
+          designSessionReadyRef.current = true;
+          return;
+        }
+        saved.productHandle = product.handle;
+        setSavedDesign(saved);
+        setDesignRestoreStatus('ready');
+      } catch (err) {
+        console.warn('[decorated PDP] restore design failed', err);
+        if (!cancelled && gen === designRestoreGenRef.current) {
+          setDesignRestoreStatus('error');
+        }
+      } finally {
+        if (!cancelled) designSessionReadyRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [designIdFromUrl, product?.handle]);
+
+  // Apply blank color from a restored design once sibling colors are ready
+  useEffect(() => {
+    if (designRestoreStatus !== 'ready' || !savedDesign?.colorCode) return;
+    const code = normalizeColorCode(savedDesign.colorCode);
+    if (!code) return;
+    if (normalizeColorCode(selectedColor) === code) return;
+
+    const match = studioColors.find(
+      (c) => normalizeColorCode(c.code) === code,
+    );
+    if (match) {
+      setSelectedColor(String(match.code).replace(/^#/, ''));
+      if (match.product) setSelectedColorProduct(match.product);
+    } else if (!studioColors.length) {
+      setSelectedColor(code.replace(/^#/, ''));
+    }
+  }, [
+    designRestoreStatus,
+    savedDesign?.colorCode,
+    studioColors,
+    selectedColor,
+  ]);
 
   useEffect(() => {
     if (!product?.handle) return;
+    // Wait until session/URL restore has run — otherwise first paint
+    // persists null and wipes the design before we can restore it.
+    if (!designSessionReadyRef.current) return;
     persistDesignSession(product.handle, savedDesign);
   }, [product?.handle, savedDesign]);
 
@@ -511,6 +687,20 @@ export default function Product() {
       };
     })
     .filter(Boolean);
+  // Session restore may keep previewUrl without per-view mockups — still show art
+  if (
+    !bakedMockups.length &&
+    savedDesign?.previewUrl &&
+    mockupsMatchSelectedColor
+  ) {
+    bakedMockups.push({
+      id: 'mockup-preview',
+      url: savedDesign.previewUrl,
+      altText: `${title} · design mockup`,
+      mockupView: 'front',
+      isBakedMockup: true,
+    });
+  }
   const useBakedMockups =
     mockupsMatchSelectedColor && bakedMockups.length > 0;
   const galleryImages = savedDesign
@@ -522,7 +712,7 @@ export default function Product() {
   return (
     <>
       <div className="product">
-        <div className="product-left">
+        <div className="product-left" ref={productMediaRef}>
           <ProductImage
             images={galleryImages}
             designOverlayByView={useBakedMockups ? null : overlayByView}
@@ -678,54 +868,121 @@ export default function Product() {
             <button
               type="button"
               className="solid-button solid-button--pastel-sky product-design-cta"
-              onClick={() => setDesignStudioOpen(true)}
+              onClick={() => {
+                setConfirmClearDesign(false);
+                setDesignStudioOpen(true);
+              }}
             >
               <Wand2 size={18} className="button-icon" aria-hidden />
               {savedDesign ? 'Edit design' : 'Start design studio'}
             </button>
-            {designCtaAttention && !designReady ? (
-              <p className="product-design-cta-nudge" role="status">
-                {mockupSyncStatus === 'syncing'
-                  ? 'Updating the mockup for this blank color…'
-                  : mockupSyncStatus === 'error'
-                    ? 'Mockup update failed — use Retry below, then add to cart.'
-                    : 'Please save your design here before adding sizes to cart.'}
-              </p>
-            ) : null}
-            {mockupSyncStatus === 'syncing' ? (
-              <p className="product-design-saved-note" role="status">
-                Building a mockup on this blank color — add to cart will unlock
-                in a moment.
-              </p>
-            ) : mockupSyncStatus === 'error' ? (
-              <p className="product-design-saved-note product-design-saved-note--warn" role="alert">
-                {mockupSyncError ||
-                  'Could not save a mockup for this blank color.'}{' '}
+            {savedDesign ? (
+              confirmClearDesign ? (
+                <div
+                  className="product-design-clear-confirm"
+                  role="group"
+                  aria-label="Confirm clear design"
+                >
+                  <p className="product-design-clear-confirm-copy">
+                    Clear this design and start over? Your mockup on this page
+                    will be removed — you can create a new one anytime.
+                  </p>
+                  <div className="product-design-clear-confirm-actions">
+                    <button
+                      type="button"
+                      className="product-design-clear-confirm-btn product-design-clear-confirm-btn--danger"
+                      onClick={clearSavedDesign}
+                    >
+                      Yes, clear design
+                    </button>
+                    <button
+                      type="button"
+                      className="product-design-clear-confirm-btn"
+                      onClick={() => setConfirmClearDesign(false)}
+                    >
+                      Keep design
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  className="product-design-size-hint-link"
-                  onClick={() => setMockupSyncRetry((n) => n + 1)}
+                  className="product-design-clear-btn"
+                  onClick={() => setConfirmClearDesign(true)}
                 >
-                  Retry
+                  <Trash2 size={15} aria-hidden />
+                  Clear design
                 </button>
-              </p>
-            ) : savedDesign?.remoteId ? (
-              <p className="product-design-saved-note">
-                Design saved (ID {savedDesign.remoteId.slice(0, 8)}…) — artwork
-                only shows on the sides you decorated. It will travel with this
-                item in cart and on the order.
-              </p>
-            ) : savedDesign ? (
-              <p className="product-design-saved-note product-design-saved-note--warn">
-                Design is on this page but not synced to the server yet. Re-open
-                the studio and save again before adding to cart.
-              </p>
-            ) : (
-              <p className="product-design-saved-note">
-                Design your artwork before choosing sizes and adding to cart —
-                we attach the files to your order for production.
-              </p>
-            )}
+              )
+            ) : null}
+            {!confirmClearDesign ? (
+              <>
+                {designRestoreStatus === 'loading' ? (
+                  <p className="product-design-saved-note" role="status">
+                    Loading your saved design…
+                  </p>
+                ) : designRestoreStatus === 'error' ? (
+                  <p
+                    className="product-design-saved-note product-design-saved-note--warn"
+                    role="alert"
+                  >
+                    Couldn’t load that design. Start Design Studio to create a new
+                    one, or go back to your account.
+                  </p>
+                ) : designRestoreStatus === 'ready' && savedDesign?.remoteId ? (
+                  <p className="product-design-saved-note" role="status">
+                    Design restored from a past order — pick sizes and add to cart
+                    to reorder, or edit / clear the design first.
+                  </p>
+                ) : null}
+                {designCtaAttention && !designReady ? (
+                  <p className="product-design-cta-nudge" role="status">
+                    {mockupSyncStatus === 'syncing'
+                      ? 'Updating the mockup for this blank color…'
+                      : mockupSyncStatus === 'error'
+                        ? 'Mockup update failed — use Retry below, then add to cart.'
+                        : 'Please save your design here before adding sizes to cart.'}
+                  </p>
+                ) : null}
+                {mockupSyncStatus === 'syncing' ? (
+                  <p className="product-design-saved-note" role="status">
+                    Building a mockup on this blank color — add to cart will unlock
+                    in a moment.
+                  </p>
+                ) : mockupSyncStatus === 'error' ? (
+                  <p
+                    className="product-design-saved-note product-design-saved-note--warn"
+                    role="alert"
+                  >
+                    {mockupSyncError ||
+                      'Could not save a mockup for this blank color.'}{' '}
+                    <button
+                      type="button"
+                      className="product-design-size-hint-link"
+                      onClick={() => setMockupSyncRetry((n) => n + 1)}
+                    >
+                      Retry
+                    </button>
+                  </p>
+                ) : savedDesign?.remoteId ? (
+                  <p className="product-design-saved-note">
+                    Design saved (ID {savedDesign.remoteId.slice(0, 8)}…) — artwork
+                    only shows on the sides you decorated. It will travel with this
+                    item in cart and on the order.
+                  </p>
+                ) : savedDesign ? (
+                  <p className="product-design-saved-note product-design-saved-note--warn">
+                    Design is on this page but not synced to the server yet. Re-open
+                    the studio and save again before adding to cart.
+                  </p>
+                ) : (
+                  <p className="product-design-saved-note">
+                    Design your artwork before choosing sizes and adding to cart —
+                    we attach the files to your order for production.
+                  </p>
+                )}
+              </>
+            ) : null}
           </div>
           <ProductForm
             productOptions={productOptions}
@@ -758,7 +1015,7 @@ export default function Product() {
       <DesignStudioModal
         open={designStudioOpen}
         onClose={() => setDesignStudioOpen(false)}
-        onSave={(design) => setSavedDesign(design)}
+        onSave={handleDesignSaved}
         productTitle={title}
         productHandle={product.handle}
         productId={product.id}
@@ -1914,10 +2171,18 @@ const RELATED_PRODUCTS_QUERY = `#graphql
       ...ProductVariant
     }
   }
-  query RelatedProducts($query: String!, $first: Int!) {
-    products(first: $first, query: $query) {
+  query RelatedProducts(
+    $query: String!
+    $first: Int!
+    $after: String
+  ) {
+    products(first: $first, after: $after, query: $query) {
       nodes {
         ...RelatedProduct
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }

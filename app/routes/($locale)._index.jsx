@@ -255,7 +255,10 @@ export default function Homepage() {
         />
       )}
 
-      <HomeBlanksTeaser collection={data.tshirtsCollection} />
+      <HomeBlanksTeaser
+        collection={data.tshirtsCollection}
+        siblingColorData={data.productSiblingColorData}
+      />
     </div>
   );
 }
@@ -835,9 +838,12 @@ function HomeValueProps() {
 
 /**
  * Secondary path for customers who only need undecorated blanks.
- * @param {{ collection: FeaturedCollectionFragment | null }}
+ * @param {{
+ *   collection: FeaturedCollectionFragment | null;
+ *   siblingColorData?: Record<string, { count: number; swatchHexes: string[] }>;
+ * }}
  */
-function HomeBlanksTeaser({ collection }) {
+function HomeBlanksTeaser({ collection, siblingColorData }) {
   const products = collection?.products?.nodes?.slice(0, 4) ?? [];
 
   return (
@@ -872,7 +878,11 @@ function HomeBlanksTeaser({ collection }) {
         {products.length > 0 ? (
           <div className="home-featured-grid home-blanks-teaser-grid">
             {products.map((product) => (
-              <HomeFeaturedProductCard key={product.id} product={product} />
+              <HomeFeaturedProductCard
+                key={product.id}
+                product={product}
+                siblingColorData={siblingColorData?.[product.id]}
+              />
             ))}
           </div>
         ) : null}

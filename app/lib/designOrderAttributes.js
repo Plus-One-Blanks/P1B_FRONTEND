@@ -11,6 +11,8 @@ export const DESIGN_ATTR = {
   printStyle: 'Print style',
   locations: 'Locations',
   color: 'Garment color',
+  /** Decorated PDP handle for account reorder links */
+  productHandle: '_designProductHandle',
 };
 
 /**
@@ -88,6 +90,12 @@ export function buildDesignLineAttributes(design, opts = {}) {
       value: truncateAttr(previewUrl),
     });
   }
+  if (design.productHandle) {
+    attrs.push({
+      key: DESIGN_ATTR.productHandle,
+      value: truncateAttr(String(design.productHandle)),
+    });
+  }
   if (packetUrl) {
     attrs.push({key: DESIGN_ATTR.packet, value: truncateAttr(packetUrl)});
   }
@@ -123,7 +131,20 @@ export function readDesignFromLineAttributes(attributes) {
     printStyle: get(DESIGN_ATTR.printStyle),
     locations: get(DESIGN_ATTR.locations),
     color: get(DESIGN_ATTR.color),
+    productHandle: get(DESIGN_ATTR.productHandle),
   };
+}
+
+/**
+ * Deep link back to the decorated PDP with this design preloaded.
+ * @param {string | null | undefined} productHandle
+ * @param {string} designId
+ */
+export function buildDesignReorderUrl(productHandle, designId) {
+  if (!productHandle || !designId) return null;
+  const handle = String(productHandle).replace(/^\/+|\/+$/g, '');
+  if (!handle) return null;
+  return `/decorated-products/${handle}?design=${encodeURIComponent(designId)}`;
 }
 
 /**
@@ -190,7 +211,17 @@ export function loadDesignSession(productHandle) {
     const raw = sessionStorage.getItem(sessionKey(productHandle));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed?.remoteId && !parsed?.logoDataUrl) return null;
+    const hasMockup = (parsed?.viewMockups || []).some(
+      (m) => m?.url || m?.dataUrl,
+    );
+    if (
+      !parsed?.remoteId &&
+      !parsed?.logoDataUrl &&
+      !parsed?.previewUrl &&
+      !hasMockup
+    ) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;

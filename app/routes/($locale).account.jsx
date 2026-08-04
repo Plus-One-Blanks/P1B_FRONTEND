@@ -6,7 +6,7 @@ import {
   redirect,
   useLoaderData,
 } from 'react-router';
-import {LayoutGrid, LogOut, MapPin, Package, User} from 'lucide-react';
+import {LayoutGrid, LogOut, MapPin, Package, User, Wand2} from 'lucide-react';
 import {CUSTOMER_DETAILS_QUERY} from '~/graphql/customer-account/CustomerDetailsQuery';
 import {
   guardCustomerAccountAuth,
@@ -203,6 +203,17 @@ function AccountMenu({preview}) {
                 <Package size={20} strokeWidth={1.75} />
               </span>
               <span>Orders</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink
+              to={{pathname: '/account/designs', search: previewSearch}}
+              className={navLinkClassName}
+            >
+              <span className="account-nav-link-icon" aria-hidden>
+                <Wand2 size={20} strokeWidth={1.75} />
+              </span>
+              <span>Designs</span>
             </NavLink>
           </li>
           <li>

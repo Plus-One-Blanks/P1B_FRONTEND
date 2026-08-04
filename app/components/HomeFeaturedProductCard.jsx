@@ -121,9 +121,10 @@ export function HomeFeaturedProductCard({
         </p>
       )}
       <div className="home-featured-price-row">
-        <p className="home-featured-price">
-          From {price ? <Money data={price} /> : null}
-        </p>
+        <div className="home-featured-price">
+          <span className="home-featured-price-label">From</span>
+          {price ? <Money data={price} /> : null}
+        </div>
         {brandLogo ? (
           <div
             className="home-featured-brand-logo-wrap"

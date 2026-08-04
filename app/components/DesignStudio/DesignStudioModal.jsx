@@ -32,6 +32,7 @@ import {
   pickGarmentViewImage,
   LOCATION_CATALOG,
 } from '~/components/DesignStudio/designStudioLocations';
+import {ColorDropdown} from '~/components/ColorDropdown';
 
 const STEPS = [
   {id: 'color', label: 'Color'},
@@ -160,11 +161,19 @@ export function DesignStudioModal({
   /** @type {[Record<string, { past: string[]; future: string[] }>, Function]} */
   const [artHistory, setArtHistory] = useState({});
   const stageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const fitLayerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const logoImgRef = useRef(/** @type {HTMLImageElement | null} */ (null));
   const dragStart = useRef({mx: 0, my: 0, x: 0.5, y: 0.36});
   const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const rightsRef = useRef(/** @type {HTMLLabelElement | null} */ (null));
   const locationsRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  /** Object-fit:contain box of the garment photo inside the square stage (%) */
+  const [fitBox, setFitBox] = useState({
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+  });
 
   const activeArt = artByLocation[activeLocationId] || null;
   const activeMeta = locationOptions.find((l) => l.id === activeLocationId);
@@ -656,8 +665,11 @@ export function DesignStudioModal({
 
   const onPointerMove = useCallback(
     (e) => {
-      if (!dragging || !stageRef.current) return;
-      const rect = stageRef.current.getBoundingClientRect();
+      if (!dragging) return;
+      const rect =
+        fitLayerRef.current?.getBoundingClientRect() ||
+        stageRef.current?.getBoundingClientRect();
+      if (!rect?.width || !rect?.height) return;
       const dx = (e.clientX - dragStart.current.mx) / rect.width;
       const dy = (e.clientY - dragStart.current.my) / rect.height;
       updateActiveTransform({
@@ -681,8 +693,6 @@ export function DesignStudioModal({
     };
   }, [dragging, onPointerMove, onPointerUp]);
 
-  if (!open || typeof document === 'undefined') return null;
-
   const imagePool =
     productImages?.length > 0
       ? productImages
@@ -696,12 +706,77 @@ export function DesignStudioModal({
   const displayImage =
     pickGarmentViewImage(imagePool, garmentView) || productImage || null;
 
+  // Keep print/logo overlays aligned to the actual object-fit:contain photo
+  // (square stage letterboxes portrait garment shots on mobile).
+  useEffect(() => {
+    if (!open || (step !== 'artwork' && step !== 'locations')) return;
+
+    const updateFit = () => {
+      const stage = stageRef.current;
+      const img = stage?.querySelector('.design-studio-garment-frame img');
+      if (!stage || !(img instanceof HTMLImageElement)) return;
+      const sr = stage.getBoundingClientRect();
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      if (!nw || !nh || !sr.width || !sr.height) {
+        setFitBox({left: 0, top: 0, width: 100, height: 100});
+        return;
+      }
+      const er = sr.width / sr.height;
+      const ir = nw / nh;
+      let cw;
+      let ch;
+      let ox;
+      let oy;
+      if (ir > er) {
+        cw = sr.width;
+        ch = sr.width / ir;
+        ox = 0;
+        oy = (sr.height - ch) / 2;
+      } else {
+        ch = sr.height;
+        cw = sr.height * ir;
+        ox = (sr.width - cw) / 2;
+        oy = 0;
+      }
+      setFitBox({
+        left: (ox / sr.width) * 100,
+        top: (oy / sr.height) * 100,
+        width: (cw / sr.width) * 100,
+        height: (ch / sr.height) * 100,
+      });
+    };
+
+    updateFit();
+    const stage = stageRef.current;
+    const img = stage?.querySelector('.design-studio-garment-frame img');
+    img?.addEventListener('load', updateFit);
+    const ro =
+      typeof ResizeObserver !== 'undefined' && stage
+        ? new ResizeObserver(updateFit)
+        : null;
+    if (stage && ro) ro.observe(stage);
+    window.addEventListener('resize', updateFit);
+    return () => {
+      img?.removeEventListener('load', updateFit);
+      ro?.disconnect();
+      window.removeEventListener('resize', updateFit);
+    };
+  }, [open, step, displayImage?.url, garmentView]);
+
+  if (!open || typeof document === 'undefined') return null;
+
   const confirmedColorLabel =
     colors.find((c) => colorsMatch(c.code, pendingColor || colorCode))?.name ||
     colorName ||
     pendingColor ||
     colorCode ||
     'Selected color';
+
+  const selectedStudioColorCode =
+    colors.find((c) => colorsMatch(c.code, pendingColor || colorCode))?.code ||
+    pendingColor ||
+    colorCode;
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
@@ -835,37 +910,51 @@ export function DesignStudioModal({
               </p>
 
               {colors.length > 0 ? (
-                <div className="design-studio-swatches" role="listbox">
-                  {colors.map((c) => {
-                    const selected = colorsMatch(pendingColor, c.code);
-                    return (
-                    <button
-                      key={c.code}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      className={`design-studio-swatch ${
-                        selected ? 'is-selected' : ''
-                      }`}
-                      style={{
-                        background: c.code.startsWith('#')
-                          ? c.code
-                          : `#${c.code}`,
-                      }}
-                      title={c.name || c.code}
-                      onClick={() => {
-                        setPendingColor(c.code);
-                        onConfirmColor?.(c.code);
+                <>
+                  <div className="design-studio-color-picker">
+                    <div className="color-selector-label">
+                      <label htmlFor="design-studio-color-dropdown">
+                        Selected Color
+                      </label>
+                    </div>
+                    <ColorDropdown
+                      triggerId="design-studio-color-dropdown"
+                      colors={colors}
+                      selectedColor={selectedStudioColorCode}
+                      onColorSelect={(code) => {
+                        setPendingColor(code);
+                        onConfirmColor?.(code);
                       }}
                     />
-                    );
-                  })}
-                </div>
+                  </div>
+                  <div className="design-studio-swatches" role="listbox">
+                    {colors.map((c) => {
+                      const selected = colorsMatch(pendingColor, c.code);
+                      return (
+                        <button
+                          key={c.code}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={`design-studio-swatch ${
+                            selected ? 'is-selected' : ''
+                          }`}
+                          style={{
+                            background: c.code.startsWith('#')
+                              ? c.code
+                              : `#${c.code}`,
+                          }}
+                          title={c.name || c.code}
+                          onClick={() => {
+                            setPendingColor(c.code);
+                            onConfirmColor?.(c.code);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
               ) : null}
-
-              <p className="design-studio-selected-line">
-                Selected: <strong>{confirmedColorLabel}</strong>
-              </p>
             </div>
           </div>
         ) : null}
@@ -951,51 +1040,64 @@ export function DesignStudioModal({
                 ) : (
                   <div className="design-studio-garment is-empty" />
                 )}
-                {activeMeta?.transform ? (
-                  <div
-                    className={`design-studio-placement-guide${
-                      activeArt?.logoDataUrl ? ' is-filled' : ' is-empty'
-                    }`}
-                    style={{
-                      left: `${activeMeta.transform.x * 100}%`,
-                      top: `${activeMeta.transform.y * 100}%`,
-                      width: `${activeMeta.transform.scale * 100}%`,
-                      transform: `translate(-50%, -50%) rotate(${
-                        activeMeta.transform.rotation || 0
-                      }deg)`,
-                    }}
-                    aria-hidden={!activeArt?.logoDataUrl}
-                  >
-                    {!activeArt?.logoDataUrl ? (
-                      <span className="design-studio-placement-guide-copy">
-                        <span className="design-studio-placement-guide-title">
-                          Logo area
+                <div
+                  ref={fitLayerRef}
+                  className="design-studio-fit-layer"
+                  style={{
+                    left: `${fitBox.left}%`,
+                    top: `${fitBox.top}%`,
+                    width: `${fitBox.width}%`,
+                    height: `${fitBox.height}%`,
+                  }}
+                >
+                  {activeMeta?.transform ? (
+                    <div
+                      className={`design-studio-placement-guide design-studio-placement-guide--${
+                        activeMeta.id
+                      }${
+                        activeArt?.logoDataUrl ? ' is-filled' : ' is-empty'
+                      }`}
+                      style={{
+                        left: `${activeMeta.transform.x * 100}%`,
+                        top: `${activeMeta.transform.y * 100}%`,
+                        width: `${activeMeta.transform.scale * 100}%`,
+                        transform: `translate(-50%, -50%) rotate(${
+                          activeMeta.transform.rotation || 0
+                        }deg)`,
+                      }}
+                      aria-hidden={!activeArt?.logoDataUrl}
+                    >
+                      {!activeArt?.logoDataUrl ? (
+                        <span className="design-studio-placement-guide-copy">
+                          <span className="design-studio-placement-guide-title">
+                            Print area
+                          </span>
+                          <span className="design-studio-placement-guide-sub">
+                            {activeMeta.label}
+                          </span>
                         </span>
-                        <span className="design-studio-placement-guide-sub">
-                          {activeMeta.label}
-                        </span>
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activeArt?.logoDataUrl ? (
-                  <img
-                    ref={logoImgRef}
-                    src={activeArt.logoDataUrl}
-                    alt={`${activeMeta?.label || 'Design'} artwork`}
-                    className={`design-studio-logo ${
-                      pickMode ? 'is-picking' : ''
-                    }`}
-                    draggable={false}
-                    onPointerDown={handleLogoPointerDown}
-                    style={{
-                      left: `${activeArt.transform.x * 100}%`,
-                      top: `${activeArt.transform.y * 100}%`,
-                      width: `${activeArt.transform.scale * 100}%`,
-                      transform: `translate(-50%, -50%) rotate(${activeArt.transform.rotation}deg)`,
-                    }}
-                  />
-                ) : null}
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {activeArt?.logoDataUrl ? (
+                    <img
+                      ref={logoImgRef}
+                      src={activeArt.logoDataUrl}
+                      alt={`${activeMeta?.label || 'Design'} artwork`}
+                      className={`design-studio-logo ${
+                        pickMode ? 'is-picking' : ''
+                      }`}
+                      draggable={false}
+                      onPointerDown={handleLogoPointerDown}
+                      style={{
+                        left: `${activeArt.transform.x * 100}%`,
+                        top: `${activeArt.transform.y * 100}%`,
+                        width: `${activeArt.transform.scale * 100}%`,
+                        transform: `translate(-50%, -50%) rotate(${activeArt.transform.rotation}deg)`,
+                      }}
+                    />
+                  ) : null}
+                </div>
                 {pickMode && activeArt?.logoDataUrl ? (
                   <div className="design-studio-pick-banner">
                     Click the artwork to select colors to remove
@@ -1170,33 +1272,35 @@ export function DesignStudioModal({
                   Remove selected colors
                 </button>
 
-                <button
-                  type="button"
-                  className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                  disabled={
-                    !activeArt?.originalDataUrl ||
-                    activeArt.logoDataUrl === activeArt.originalDataUrl ||
-                    Boolean(busy)
-                  }
-                  onClick={handleRestoreOriginal}
-                >
-                  <RotateCcw size={18} aria-hidden />
-                  Restore original art
-                </button>
+                <div className="design-studio-tools-grid">
+                  <button
+                    type="button"
+                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                    disabled={
+                      !activeArt?.originalDataUrl ||
+                      activeArt.logoDataUrl === activeArt.originalDataUrl ||
+                      Boolean(busy)
+                    }
+                    onClick={handleRestoreOriginal}
+                  >
+                    <RotateCcw size={18} aria-hidden />
+                    Restore original
+                  </button>
 
-                <button
-                  type="button"
-                  className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                  disabled={!activeArt?.logoDataUrl || Boolean(busy)}
-                  onClick={handleRemoveBg}
-                >
-                  {busy === 'remove-bg' ? (
-                    <Loader2 size={18} className="is-spin" aria-hidden />
-                  ) : (
-                    <Wand2 size={18} aria-hidden />
-                  )}
-                  Auto clean (AI)
-                </button>
+                  <button
+                    type="button"
+                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                    disabled={!activeArt?.logoDataUrl || Boolean(busy)}
+                    onClick={handleRemoveBg}
+                  >
+                    {busy === 'remove-bg' ? (
+                      <Loader2 size={18} className="is-spin" aria-hidden />
+                    ) : (
+                      <Wand2 size={18} aria-hidden />
+                    )}
+                    Auto clean
+                  </button>
+                </div>
                 <p className="design-studio-hint">
                   Tip: pick background colors to remove (often white), then use
                   Undo / Redo to step through changes. Auto clean can over-erase
@@ -1213,7 +1317,7 @@ export function DesignStudioModal({
                     min={0.08}
                     max={0.7}
                     step={0.01}
-                    value={activeArt?.transform.scale ?? 0.32}
+                    value={activeArt?.transform.scale ?? 0.36}
                     disabled={!activeArt}
                     onChange={(e) =>
                       updateActiveTransform({scale: Number(e.target.value)})

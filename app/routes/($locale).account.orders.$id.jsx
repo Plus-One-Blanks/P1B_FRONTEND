@@ -1,8 +1,12 @@
-import {redirect, useLoaderData} from 'react-router';
+import {redirect, useLoaderData, Link} from 'react-router';
 import {Money, Image} from '@shopify/hydrogen';
 import {CUSTOMER_ORDER_QUERY} from '~/graphql/customer-account/CustomerOrderQuery';
 import {fromBase64} from '~/lib/base64';
 import {guardCustomerAccountAuth} from '~/lib/customerAccountAuth';
+import {
+  buildDesignReorderUrl,
+  readDesignFromLineAttributes,
+} from '~/lib/designOrderAttributes';
 
 /**
  * @type {Route.MetaFunction}
@@ -300,19 +304,49 @@ export default function OrderRoute() {
  * @param {{lineItem: OrderLineItemFullFragment}}
  */
 function OrderLineRow({lineItem}) {
+  const design = readDesignFromLineAttributes(lineItem.customAttributes);
+  const thumbUrl = design?.previewUrl || lineItem?.image?.url || null;
+  const reorderUrl = design
+    ? buildDesignReorderUrl(design.productHandle, design.id)
+    : null;
+
   return (
     <tr key={lineItem.id}>
       <td>
         <div className="account-order-line">
-          {lineItem?.image && (
+          {thumbUrl ? (
             <div className="account-order-line-image">
-              <Image data={lineItem.image} width={96} height={96} />
+              {design?.previewUrl ? (
+                <img
+                  src={design.previewUrl}
+                  alt=""
+                  width={96}
+                  height={96}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : lineItem?.image ? (
+                <Image data={lineItem.image} width={96} height={96} />
+              ) : null}
             </div>
-          )}
+          ) : null}
           <div className="account-order-line-text">
             <p className="account-order-line-title">{lineItem.title}</p>
             {lineItem.variantTitle ? (
               <small className="account-muted">{lineItem.variantTitle}</small>
+            ) : null}
+            {design ? (
+              <div className="account-order-line-design">
+                <span className="account-order-line-design-label">
+                  Decorated design
+                  {design.color ? ` · ${design.color}` : ''}
+                </span>
+                {reorderUrl ? (
+                  <Link to={reorderUrl} className="account-order-line-reorder">
+                    Reorder
+                  </Link>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>
