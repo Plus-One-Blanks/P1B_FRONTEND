@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { getProductOptions } from '@shopify/hydrogen';
 import { AddToCartButton } from './AddToCartButton';
 import { useAside } from './Aside';
-import { getActiveTier, getTierPrice, BULK_TIERS } from './BulkPricingTiers';
 
 /**
  * Shopify size value looks like apparel (S–4XL, waist, etc.) — use full grid even if only one variant exists.
@@ -130,9 +129,6 @@ function withDesignAttributes(lines, designAttrs) {
  *   productOptions: MappedProductOptions[];
  *   selectedVariant: ProductFragment['selectedOrFirstAvailableVariant'];
  *   selectedColorProduct?: ProductFragment | null;
- *   activeTier?: object | null;
- *   currentCartTotal?: number;
- *   onProjectedTotalChange?: (total: number) => void;
  *   designLineAttributes?: Array<{ key: string; value: string }> | null;
  *   requireDesign?: boolean;
  *   designReady?: boolean;
@@ -145,9 +141,6 @@ export function ProductForm({
   productOptions,
   selectedVariant,
   selectedColorProduct,
-  activeTier,
-  currentCartTotal = 0,
-  onProjectedTotalChange,
   designLineAttributes = null,
   requireDesign = false,
   designReady = true,
@@ -204,27 +197,6 @@ export function ProductForm({
           ...prev,
           [sizeName]: quantity,
         };
-
-        // Calculate projected cart total
-        if (onProjectedTotalChange) {
-          let projectedTotal = currentCartTotal;
-          effectiveSizeOption.optionValues.forEach((value) => {
-            const qty = quantityForSizeLabel(updated, value.name);
-            if (qty > 0) {
-              // Find variant price
-              let variant = findVariantForSize(value.name);
-              if (!variant) {
-                variant = value.firstSelectableVariant;
-              }
-
-              const price = variant?.price?.amount
-                ? parseFloat(variant.price.amount)
-                : 0;
-              projectedTotal += price * qty;
-            }
-          });
-          onProjectedTotalChange(projectedTotal);
-        }
 
         return updated;
       });
@@ -303,8 +275,6 @@ export function ProductForm({
           selectedColorProduct={selectedColorProduct}
           cartLines={linesForCart}
           onAddToCart={() => open('cart')}
-          activeTier={activeTier}
-          currentCartTotal={currentCartTotal}
           alwaysShowSizes={['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']}
           addToCartDisabled={designBlocksAdd}
           onBlockedAddToCart={promptForDesign}
@@ -325,19 +295,7 @@ export function ProductForm({
     );
     const oneSizeQuantity = sizeQuantities[onlySizeLabel] || 0;
 
-    // Calculate projected total including this item to determine tier
-    const projectedTotalWithThis = currentCartTotal + (basePrice * oneSizeQuantity);
-    const projectedTier = getActiveTier(projectedTotalWithThis);
-    const tierToUse = projectedTier || activeTier;
-
-    // Calculate tier-adjusted price
-    let price = basePrice;
-    if (tierToUse) {
-      const tierIndex = BULK_TIERS.findIndex(t => t.code === tierToUse.code);
-      if (tierIndex >= 0) {
-        price = getTierPrice(basePrice, tierIndex);
-      }
-    }
+    const price = basePrice;
 
     const stockQuantity = variant?.quantityAvailable ?? (variant?.availableForSale ? 999 : 0);
     const available = variant?.availableForSale === true;
@@ -346,34 +304,10 @@ export function ProductForm({
       if (requireDesign && !designReady && quantity > 0) {
         promptForDesign();
       }
-      setSizeQuantities((prev) => {
-        const updated = {
-          ...prev,
-          [onlySizeLabel]: quantity,
-        };
-
-        // Calculate projected cart total
-        if (onProjectedTotalChange) {
-          let projectedTotal = currentCartTotal;
-          if (quantity > 0) {
-            // Recalculate price with updated quantity for tier
-            const tempProjectedTotal = currentCartTotal + (basePrice * quantity);
-            const tempTier = getActiveTier(tempProjectedTotal);
-            const tempTierToUse = tempTier || activeTier;
-            let tempPrice = basePrice;
-            if (tempTierToUse) {
-              const tempTierIndex = BULK_TIERS.findIndex(t => t.code === tempTierToUse.code);
-              if (tempTierIndex >= 0) {
-                tempPrice = getTierPrice(basePrice, tempTierIndex);
-              }
-            }
-            projectedTotal += tempPrice * quantity;
-          }
-          onProjectedTotalChange(projectedTotal);
-        }
-
-        return updated;
-      });
+      setSizeQuantities((prev) => ({
+        ...prev,
+        [onlySizeLabel]: quantity,
+      }));
     };
 
     // Build cart lines
@@ -639,8 +573,6 @@ function ProductOptionItem({ optionName, value, navigate }) {
  *   selectedColorProduct?: ProductFragment | null;
  *   cartLines?: Array<any>;
  *   onAddToCart?: () => void;
- *   activeTier?: object | null;
- *   currentCartTotal?: number;
  *   addToCartDisabled?: boolean;
  *   onBlockedAddToCart?: () => void;
  *   showDesignHint?: boolean;
@@ -656,8 +588,6 @@ function SizeSelectorWithQuantities({
   selectedColorProduct,
   cartLines = [],
   onAddToCart,
-  activeTier,
-  currentCartTotal = 0,
   alwaysShowSizes = null,
   addToCartDisabled = false,
   onBlockedAddToCart,
@@ -769,19 +699,7 @@ function SizeSelectorWithQuantities({
             ? parseFloat(variant.price.amount)
             : 0;
 
-          // Calculate projected total including this item to determine tier
-          const projectedTotalWithThis = currentCartTotal + (basePrice * quantity);
-          const projectedTier = getActiveTier(projectedTotalWithThis);
-          const tierToUse = projectedTier || activeTier;
-
-          // Get tier-adjusted price
-          let price = basePrice;
-          if (tierToUse) {
-            const tierIndex = BULK_TIERS.findIndex(t => t.code === tierToUse.code);
-            if (tierIndex >= 0) {
-              price = getTierPrice(basePrice, tierIndex);
-            }
-          }
+          const price = basePrice;
 
           // Determine availability: use variant's availableForSale if we have a variant from selected color product
           // If we have a selected color product but no variant found, mark as unavailable

@@ -1,24 +1,40 @@
 import { Image, Money } from '@shopify/hydrogen';
 import { Link } from 'react-router';
 import { groupCartLinesForPageDisplay } from '~/lib/cartEditSizes';
-import { cartRetailSubtotalFromLines } from '~/lib/cartRetailPricing';
+import { readDesignFromLineAttributes } from '~/lib/designOrderAttributes';
+import { readGangSheetFromLineAttributes } from '~/lib/dtfGangSheetOrderAttributes';
 
 /**
- * @param {{ cart: CartSummaryProps['cart'] }}
+ * Prefer custom mockup / gang sheet preview over the Shopify product image.
+ * @param {{ attributes?: Array<{ key?: string | null; value?: string | null }> | null; merchandise?: { image?: { url?: string | null; altText?: string | null } | null } | null } | null | undefined} line
+ * @returns {{ url: string; alt: string; kind: 'gang' | 'design' | 'product' } | null}
  */
-function CartAsideSavings({ cart }) {
-  const lines = cart?.lines?.nodes ?? [];
-  const retailSubtotal = cartRetailSubtotalFromLines(lines);
-  const subtotal = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
-  const savings =
-    retailSubtotal > 0 && subtotal >= 0 ? Math.max(0, retailSubtotal - subtotal) : 0;
-  if (savings <= 0) return null;
-  return (
-    <div className="cart-summary-savings">
-      <span className="cart-summary-savings-label">Total Savings</span>
-      <span className="cart-summary-savings-amount">- ${savings.toFixed(2)}</span>
-    </div>
-  );
+function summaryThumbForLine(line) {
+  const gang = readGangSheetFromLineAttributes(line?.attributes);
+  if (gang?.previewUrl) {
+    return {
+      url: String(gang.previewUrl),
+      alt: gang.designName || 'DTF gang sheet',
+      kind: 'gang',
+    };
+  }
+  const design = readDesignFromLineAttributes(line?.attributes);
+  if (design?.previewUrl) {
+    return {
+      url: String(design.previewUrl),
+      alt: 'Custom design',
+      kind: 'design',
+    };
+  }
+  const img = line?.merchandise?.image;
+  if (img?.url) {
+    return {
+      url: String(img.url),
+      alt: img.altText || '',
+      kind: 'product',
+    };
+  }
+  return null;
 }
 
 /**
@@ -32,7 +48,6 @@ export function CartSummary({ cart, layout }) {
     return (
       <div aria-labelledby="cart-summary" className={className}>
         <div className="cart-summary-totals">
-          <CartAsideSavings cart={cart} />
           <div className="cart-summary-total-row">
             <span className="cart-summary-total-label">Total</span>
             <span className="cart-summary-total-amount">
@@ -52,14 +67,6 @@ export function CartSummary({ cart, layout }) {
   const tax = parseFloat(cart?.cost?.totalTaxAmount?.amount || 0);
   const lines = cart?.lines?.nodes ?? [];
   const summaryThumbGroups = groupCartLinesForPageDisplay(lines);
-  const subtotalNum = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
-  const retailSubtotal = cartRetailSubtotalFromLines(lines);
-  /** PDP-style retail (2× variant price × qty) minus actual merchandise subtotal after bulk pricing. */
-  const savingsAmount =
-    retailSubtotal > 0 && subtotalNum >= 0
-      ? Math.max(0, retailSubtotal - subtotalNum)
-      : 0;
-  const savingsCurrency = cart?.cost?.subtotalAmount?.currencyCode;
 
   return (
     <div id="cart-summary" className={className}>
@@ -69,7 +76,7 @@ export function CartSummary({ cart, layout }) {
         <ul className="cart-order-summary-thumbs" aria-label="Items in cart">
           {summaryThumbGroups.slice(0, 5).map((group) => {
             const first = group[0];
-            const img = first?.merchandise?.image;
+            const thumb = summaryThumbForLine(first);
             const groupQty = group.reduce(
               (acc, line) => acc + (line.quantity ?? 0),
               0,
@@ -79,14 +86,24 @@ export function CartSummary({ cart, layout }) {
                 key={group.map((l) => l.id).join('::')}
                 className="cart-order-summary-thumb"
               >
-                {img?.url ? (
-                  <div className="cart-order-summary-thumb-image">
-                    <Image
-                      alt={img.altText ?? ''}
-                      data={img}
-                      sizes="48px"
-                      width={160}
-                    />
+                {thumb ? (
+                  <div
+                    className={`cart-order-summary-thumb-image${
+                      thumb.kind === 'gang'
+                        ? ' cart-order-summary-thumb-image--gang'
+                        : ''
+                    }`}
+                  >
+                    {thumb.kind === 'product' && first?.merchandise?.image ? (
+                      <Image
+                        alt={thumb.alt}
+                        data={first.merchandise.image}
+                        sizes="48px"
+                        width={160}
+                      />
+                    ) : (
+                      <img src={thumb.url} alt={thumb.alt} loading="lazy" />
+                    )}
                   </div>
                 ) : (
                   <span className="cart-order-summary-thumb-placeholder" />
@@ -104,14 +121,7 @@ export function CartSummary({ cart, layout }) {
         <div className="cart-order-summary-row">
           <span>Subtotal</span>
           <span>
-            {retailSubtotal > 0 && savingsCurrency ? (
-              <Money
-                data={{
-                  amount: retailSubtotal.toFixed(2),
-                  currencyCode: savingsCurrency,
-                }}
-              />
-            ) : cart?.cost?.subtotalAmount?.amount ? (
+            {cart?.cost?.subtotalAmount?.amount ? (
               <Money data={cart.cost.subtotalAmount} />
             ) : (
               '—'
@@ -123,19 +133,6 @@ export function CartSummary({ cart, layout }) {
             <span>Estimated tax</span>
             <span>
               <Money data={cart.cost.totalTaxAmount} />
-            </span>
-          </div>
-        ) : null}
-        {savingsAmount > 0 && savingsCurrency ? (
-          <div className="cart-order-summary-row cart-order-summary-row--savings">
-            <span>Savings</span>
-            <span className="cart-order-summary-savings-value">
-              <Money
-                data={{
-                  amount: savingsAmount.toFixed(2),
-                  currencyCode: savingsCurrency,
-                }}
-              />
             </span>
           </div>
         ) : null}

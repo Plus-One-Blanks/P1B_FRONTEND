@@ -778,8 +778,8 @@ function HomeQualityBrands() {
 function HomeValueProps() {
   const cards = [
     {
-      title: 'No minimums, real bulk pricing',
-      body: 'Start with a single decorated piece when you need to. Volume discounts step in as your order grows.',
+      title: 'No minimums',
+      body: 'Start with a single decorated piece when you need to — order what you need, when you need it.',
       Icon: DollarSign,
       iconVariant: 'sky',
     },

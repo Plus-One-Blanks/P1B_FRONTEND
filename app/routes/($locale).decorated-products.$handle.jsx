@@ -3,7 +3,6 @@ import { Suspense } from 'react';
 import {
   useLoaderData,
   Await,
-  useFetcher,
   redirect,
   useSearchParams,
 } from 'react-router';
@@ -20,8 +19,12 @@ import { ProductImage } from '~/components/ProductImage';
 import { ColorDropdown } from '~/components/ColorDropdown';
 import { ProductForm } from '~/components/ProductForm';
 import { ProductItem } from '~/components/ProductItem';
-import { BulkPricingTiers, getActiveTier } from '~/components/BulkPricingTiers';
 import { DesignStudioModal } from '~/components/DesignStudio/DesignStudioModal';
+import {
+  ContentReveal,
+  ProductPageSkeleton,
+  useApparelProductNavPending,
+} from '~/components/LoadingUI';
 import {
   designOverlaysByView,
   frontAndBackGalleryImages,
@@ -179,6 +182,7 @@ function loadDeferredData({ context, params, request }) {
 export default function Product() {
   /** @type {LoaderReturnData} */
   const { product, relatedProducts } = useLoaderData();
+  const navPending = useApparelProductNavPending();
 
   // Get current product's colorCode to initialize selected color
   const currentColorCodeTag = product.tags?.find((tag) =>
@@ -192,9 +196,6 @@ export default function Product() {
   const [selectedColorProduct, setSelectedColorProduct] = useState(product);
   // Cache for color code to image mapping for faster lookups
   const colorImageCache = useRef(new Map());
-  // Track projected cart total for bulk pricing
-  const [projectedCartTotal, setProjectedCartTotal] = useState(null);
-  const [activeTier, setActiveTier] = useState(null);
   const [designStudioOpen, setDesignStudioOpen] = useState(false);
   const [savedDesign, setSavedDesign] = useState(
     /** @type {import('~/lib/designStudioApi').SavedProductDesign | null} */ (
@@ -524,94 +525,6 @@ export default function Product() {
     mockupSyncStatus !== 'syncing' &&
     hostedPreviewReady;
 
-  const cartFetcher = useFetcher();
-  const isMountedRef = useRef(true);
-  const hasInitialFetchRef = useRef(false);
-  const fetchTimeoutRef = useRef(null);
-
-  // Fetch current cart to determine active tier (only once on mount)
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    if (typeof window !== 'undefined' &&
-      !hasInitialFetchRef.current &&
-      cartFetcher.state === 'idle' &&
-      isMountedRef.current &&
-      !cartFetcher.data) {
-      hasInitialFetchRef.current = true;
-      const timeoutId = setTimeout(() => {
-        if (isMountedRef.current && cartFetcher.state === 'idle' && !cartFetcher.data) {
-          cartFetcher.load('/cart');
-        }
-      }, 100);
-
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-
-    return () => {
-      isMountedRef.current = false;
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-        fetchTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Listen for cart update events (debounced)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleCartUpdate = () => {
-      if (!isMountedRef.current) return;
-
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-        fetchTimeoutRef.current = null;
-      }
-
-      fetchTimeoutRef.current = setTimeout(() => {
-        if (isMountedRef.current &&
-          cartFetcher.state === 'idle') {
-          cartFetcher.load('/cart');
-        }
-      }, 750);
-    };
-
-    window.addEventListener('cartUpdated', handleCartUpdate);
-
-    return () => {
-      window.removeEventListener('cartUpdated', handleCartUpdate);
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-        fetchTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Calculate active tier based on cart subtotal or projected total
-  useEffect(() => {
-    if (!isMountedRef.current) return;
-
-    const cartSubtotal = cartFetcher.data?.cart?.cost?.subtotalAmount?.amount
-      ? parseFloat(cartFetcher.data.cart.cost.subtotalAmount.amount)
-      : 0;
-
-    // Use projected total if provided (includes items in quantity inputs), otherwise use current cart
-    const totalToCheck = projectedCartTotal !== null && projectedCartTotal !== undefined
-      ? projectedCartTotal
-      : cartSubtotal;
-
-    // Find the highest tier that applies
-    const tier = getActiveTier(totalToCheck);
-
-    // Only update state if component is still mounted
-    if (isMountedRef.current) {
-      setActiveTier(tier);
-    }
-  }, [cartFetcher.data, projectedCartTotal]);
-
   // Optimistically selects a variant with given available variant information
   const selectedVariant = useOptimisticVariant(
     product.selectedOrFirstAvailableVariant,
@@ -709,117 +622,22 @@ export default function Product() {
       : frontAndBackGalleryImages(allImages, overlayByView)
     : allImages;
 
+  if (navPending) {
+    return <ProductPageSkeleton />;
+  }
+
   return (
-    <>
+    <Suspense fallback={<ProductPageSkeleton />}>
+      <Await resolve={relatedProducts ?? Promise.resolve(null)}>
+        {() => (
+          <ContentReveal>
+            <>
       <div className="product">
         <div className="product-left" ref={productMediaRef}>
           <ProductImage
             images={galleryImages}
             designOverlayByView={useBakedMockups ? null : overlayByView}
           />
-          {relatedProducts && (
-            <Suspense fallback={null}>
-              <Await resolve={relatedProducts}>
-                {(data) => {
-                  if (!data?.products?.nodes) {
-                    return selectedVariant?.price?.amount ? (
-                      <BulkPricingTiers
-                        basePrice={parseFloat(selectedVariant.price.amount)}
-                      />
-                    ) : null;
-                  }
-
-                  const allProducts = [
-                    product,
-                    ...data.products.nodes.filter(
-                      (p) =>
-                        isDecoratedProduct(p.tags) ===
-                        isDecoratedProduct(product.tags),
-                    ),
-                  ];
-
-                  // Helper to check if a product is white
-                  const isWhiteProduct = (product) => {
-                    const colorNameTag = product.tags?.find((tag) =>
-                      tag.startsWith('colorName:'),
-                    );
-                    const colorName = colorNameTag
-                      ? colorNameTag.replace('colorName:', '').trim().toLowerCase()
-                      : '';
-
-                    const colorCodeTag = product.tags?.find((tag) =>
-                      tag.startsWith('colorCode:'),
-                    );
-                    const colorCode = colorCodeTag
-                      ? colorCodeTag.replace('colorCode:', '').trim().toLowerCase()
-                      : '';
-
-                    return (
-                      colorName === 'white' ||
-                      colorCode === '#ffffff' ||
-                      colorCode === 'ffffff' ||
-                      colorCode === '#fff' ||
-                      colorCode === 'fff'
-                    );
-                  };
-
-                  // Get all variants from products and calculate min prices
-                  const whiteVariants = [];
-                  const colorVariants = [];
-
-                  allProducts.forEach((product) => {
-                    if (isWhiteProduct(product)) {
-                      if (product.adjacentVariants) {
-                        whiteVariants.push(...product.adjacentVariants);
-                      }
-                      if (product.selectedOrFirstAvailableVariant) {
-                        whiteVariants.push(product.selectedOrFirstAvailableVariant);
-                      }
-                    } else {
-                      if (product.adjacentVariants) {
-                        colorVariants.push(...product.adjacentVariants);
-                      }
-                      if (product.selectedOrFirstAvailableVariant) {
-                        colorVariants.push(product.selectedOrFirstAvailableVariant);
-                      }
-                    }
-                  });
-
-                  // Find minimum prices
-                  const getMinPrice = (variants) => {
-                    if (!variants || variants.length === 0) return null;
-                    const availableVariants = variants.filter(v => v?.availableForSale && v?.price);
-                    if (availableVariants.length === 0) return null;
-                    const prices = availableVariants.map(v => parseFloat(v.price.amount));
-                    return Math.min(...prices);
-                  };
-
-                  const whitePrice = getMinPrice(whiteVariants);
-                  const colorPrice = getMinPrice(colorVariants);
-
-                  if (!whitePrice && !colorPrice) {
-                    return selectedVariant?.price?.amount ? (
-                      <BulkPricingTiers
-                        basePrice={parseFloat(selectedVariant.price.amount)}
-                      />
-                    ) : null;
-                  }
-
-                  return (
-                    <BulkPricingTiers
-                      whiteBasePrice={whitePrice}
-                      colorBasePrice={colorPrice}
-                    />
-                  );
-                }}
-              </Await>
-            </Suspense>
-          )}
-          {!relatedProducts && selectedVariant?.price?.amount && (
-            <BulkPricingTiers
-              basePrice={parseFloat(selectedVariant.price.amount)}
-            />
-          )}
         </div>
         <div className="product-main">
           <h1>{title}</h1>
@@ -988,11 +806,6 @@ export default function Product() {
             productOptions={productOptions}
             selectedVariant={selectedVariant}
             selectedColorProduct={selectedColorProduct}
-            activeTier={activeTier}
-            currentCartTotal={cartFetcher.data?.cart?.cost?.subtotalAmount?.amount
-              ? parseFloat(cartFetcher.data.cart.cost.subtotalAmount.amount)
-              : 0}
-            onProjectedTotalChange={setProjectedCartTotal}
             designLineAttributes={designLineAttributes}
             requireDesign
             designReady={designReady}
@@ -1074,6 +887,10 @@ export default function Product() {
         }}
       />
     </>
+          </ContentReveal>
+        )}
+      </Await>
+    </Suspense>
   );
 }
 

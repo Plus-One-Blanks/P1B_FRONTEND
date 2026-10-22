@@ -67,8 +67,36 @@ async function getDesignDoc(id) {
   return snap.data();
 }
 
+/**
+ * Persist gang sheet metadata in Firestore (same GCP project as designs).
+ * @param {Record<string, unknown>} data
+ */
+async function saveGangSheetDoc(data) {
+  const id = data.id || uuidv4();
+  const ref = db.collection('gangSheets').doc(String(id));
+  const payload = {
+    ...data,
+    id,
+    updatedAt: new Date().toISOString(),
+    createdAt: data.createdAt || new Date().toISOString(),
+  };
+  await ref.set(payload, {merge: true});
+  return payload;
+}
+
+/**
+ * @param {string} id
+ */
+async function getGangSheetDoc(id) {
+  const snap = await db.collection('gangSheets').doc(String(id)).get();
+  if (!snap.exists) return null;
+  return snap.data();
+}
+
 module.exports = {
   uploadBuffer,
   saveDesignDoc,
   getDesignDoc,
+  saveGangSheetDoc,
+  getGangSheetDoc,
 };

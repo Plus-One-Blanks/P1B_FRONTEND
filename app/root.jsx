@@ -9,6 +9,8 @@ import {
   Scripts,
   ScrollRestoration,
   useRouteLoaderData,
+  useNavigation,
+  useLocation,
 } from 'react-router';
 import favicon from '~/assets/P1B_FAVICON.png';
 import {FOOTER_QUERY, HEADER_QUERY} from '~/lib/fragments';
@@ -17,6 +19,11 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 import {PageLayout} from './components/PageLayout';
+import {
+  CartSkeleton,
+  ProductPageSkeleton,
+  isApparelProductPath,
+} from '~/components/LoadingUI';
 
 /**
  * Keep root data (header, cart, footer) warm on normal link navigations.
@@ -200,6 +207,33 @@ export function Layout({children}) {
   );
 }
 
+/**
+ * While SPA-navigating to a product or cart route, swap the outlet for a
+ * skeleton so the previous page does not linger on screen.
+ */
+function PendingRouteOutlet() {
+  const navigation = useNavigation();
+  const location = useLocation();
+  const nextPath = navigation.location?.pathname;
+  const isPending =
+    navigation.state === 'loading' &&
+    Boolean(nextPath) &&
+    nextPath !== location.pathname;
+
+  if (isPending && isApparelProductPath(nextPath)) {
+    return <ProductPageSkeleton />;
+  }
+  if (isPending && /\/cart\/?$/.test(String(nextPath))) {
+    return (
+      <div className="cart-page">
+        <CartSkeleton layout="page" />
+      </div>
+    );
+  }
+
+  return <Outlet />;
+}
+
 export default function App() {
   /** @type {RootLoader} */
   const data = useRouteLoaderData('root');
@@ -214,7 +248,7 @@ export default function App() {
   }, [data?.designApiUrl]);
 
   if (!data) {
-    return <Outlet />;
+    return <PendingRouteOutlet />;
   }
 
   // If analytics consent can't be built, render the app without analytics.
@@ -222,7 +256,7 @@ export default function App() {
   if (!data.consent?.checkoutDomain) {
     return (
       <PageLayout {...data}>
-        <Outlet />
+        <PendingRouteOutlet />
       </PageLayout>
     );
   }
@@ -234,7 +268,7 @@ export default function App() {
       consent={data.consent}
     >
       <PageLayout {...data}>
-        <Outlet />
+        <PendingRouteOutlet />
       </PageLayout>
     </Analytics.Provider>
   );

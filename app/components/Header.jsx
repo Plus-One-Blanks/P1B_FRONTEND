@@ -1,7 +1,15 @@
 import {Suspense, useEffect, useRef, useState} from 'react';
 import {Await, Link, NavLink, useAsyncValue, useLocation} from 'react-router';
 import {useAnalytics, useOptimisticCart} from '@shopify/hydrogen';
-import {ChevronDown, Menu, Search, User} from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronDown,
+  Menu,
+  Phone,
+  Search,
+  ShoppingCart,
+  User,
+} from 'lucide-react';
 import {useAside} from '~/components/Aside';
 import {SolidButton} from '~/components/SolidButton';
 import logo from '~/assets/logo.svg';
@@ -11,46 +19,170 @@ import logo from '~/assets/logo.svg';
  * with fulfillment:blank). Decorated parallels use `{handle}-decorated`.
  */
 export const APPAREL_CATEGORY_HANDLES = [
-  {title: 'T-Shirts', handle: 't-shirts'},
-  {title: 'Sweatshirts', handle: 'sweatshirts'},
-  {title: 'Polos', handle: 'polos'},
-  {title: 'Hats', handle: 'hats'},
-  {title: 'Jackets', handle: 'jackets'},
-  {title: 'Safety', handle: 'safety'},
+  {
+    title: 'T-Shirts',
+    handle: 't-shirts',
+    blurb: 'Classic, soft, heavyweight, and performance tees',
+  },
+  {
+    title: 'Hoodies & Sweatshirts',
+    handle: 'sweatshirts',
+    blurb: 'Fleece, crews, and hoodies for every season',
+  },
+  {
+    title: 'Polos',
+    handle: 'polos',
+    blurb: 'Clean polos for work and branding',
+  },
+  {
+    title: 'Hats',
+    handle: 'hats',
+    blurb: 'Caps and headwear for every fit',
+  },
+  {
+    title: 'Jackets',
+    handle: 'jackets',
+    blurb: 'Outerwear ready to decorate',
+  },
+  {
+    title: 'Safety',
+    handle: 'safety',
+    blurb: 'High-vis and jobsite apparel',
+  },
 ];
 
+/** Featured brands for blank / decorated apparel megas */
+export const APPAREL_BRAND_LINKS = [
+  {
+    title: 'Gildan',
+    handle: 'gildan',
+    blurb: 'Core tees, fleece, youth, and performance styles',
+  },
+  {
+    title: 'Comfort Colors',
+    handle: 'comfort-colors',
+    blurb: 'Garment-dyed favorites with soft hand feel',
+  },
+  {
+    title: 'Bella + Canvas',
+    handle: 'bella-canvas',
+    blurb: 'Premium fits and retail-ready blanks',
+  },
+  {
+    title: 'Next Level',
+    handle: 'next-level',
+    blurb: 'Soft tees and fashion-forward basics',
+  },
+];
+
+const HEADER_PHONE = {
+  display: '(800) 224-8476',
+  href: 'tel:+18002248476',
+  label: 'Talk to a print expert',
+};
+
+const HEADER_GET_IN_TOUCH_MAILTO =
+  'mailto:support@example.com?subject=Inquiry%20%E2%80%94%20Plus%201%20Blanks';
+
 /**
- * Top-level shop modes — desktop dropdowns + mobile accordion.
+ * Bottom-nav IA for the site header (desktop mega + mobile accordion).
  * @type {Array<{
  *   id: string;
  *   title: string;
- *   blurb: string;
- *   children: Array<{ title: string; url: string }>;
+ *   href?: string;
+ *   mega?: 'dtf' | 'blank' | 'decorated' | 'list';
+ *   blurb?: string;
+ *   children?: Array<{ title: string; url: string; blurb?: string; badge?: string }>;
  * }>}
  */
 export const HEADER_PRIMARY_NAV = [
   {
+    id: 'dtf',
+    title: 'DTF Transfers',
+    href: '/dtf-sheets',
+    mega: 'dtf',
+    blurb: 'Start with individual files or a finished gang sheet.',
+  },
+  {
+    id: 'uv',
+    title: 'UV DTF',
+    href: '/dtf-sheets',
+    mega: 'list',
+    blurb: 'Hard-surface transfers coming soon to Plus 1.',
+    children: [
+      {
+        title: 'DTF Sheets hub',
+        url: '/dtf-sheets',
+        blurb: 'Browse transfer order paths',
+      },
+      {
+        title: 'Gang sheet builder',
+        url: '/dtf-sheets/builder',
+        blurb: 'Build a print-ready layout online',
+      },
+    ],
+  },
+  {
     id: 'blank',
     title: 'Blank Apparel',
-    blurb: 'Undecorated garments for print & embroidery',
-    children: APPAREL_CATEGORY_HANDLES.map(({title, handle}) => ({
-      title,
-      url: `/collections/${handle}`,
-    })),
+    href: '/collections/t-shirts',
+    mega: 'blank',
+    blurb: 'Shop by garment or brand.',
   },
   {
     id: 'decorated',
     title: 'Decorated Apparel',
-    blurb: 'Custom logos & print locations on apparel',
-    children: APPAREL_CATEGORY_HANDLES.map(({title, handle}) => ({
-      title,
-      url: `/collections/${handle}-decorated`,
-    })),
+    href: '/collections/t-shirts-decorated',
+    mega: 'decorated',
+    blurb: 'Shop by garment or brand.',
+  },
+  {
+    id: 'supplies',
+    title: 'Supplies',
+    href: '/dtf-sheets',
+  },
+  {
+    id: 'resources',
+    title: 'Resources',
+    mega: 'list',
+    blurb: 'Guides and tips for pressing and ordering.',
+    children: [
+      {
+        title: 'DTF order hub',
+        url: '/dtf-sheets',
+        blurb: 'Choose how to order transfers',
+      },
+      {
+        title: 'Gang sheet studio',
+        url: '/dtf-sheets/studio',
+        blurb: 'Open the online layout builder',
+      },
+    ],
+  },
+  {
+    id: 'support',
+    title: 'Support',
+    mega: 'list',
+    blurb: 'We’re here for print questions and orders.',
+    children: [
+      {
+        title: 'Email support',
+        url: HEADER_GET_IN_TOUCH_MAILTO,
+        blurb: 'Reach the Plus 1 team',
+      },
+      {
+        title: 'Call a print expert',
+        url: HEADER_PHONE.href,
+        blurb: HEADER_PHONE.display,
+      },
+    ],
+  },
+  {
+    id: 'track',
+    title: 'Track Order',
+    href: '/account/orders',
   },
 ];
-
-const HEADER_GET_IN_TOUCH_MAILTO =
-  'mailto:support@example.com?subject=Inquiry%20%E2%80%94%20Plus%201%20Blanks';
 
 /**
  * @param {HeaderProps}
@@ -70,49 +202,93 @@ export function Header({header, isLoggedIn, cart, publicStoreDomain}) {
   }, []);
 
   return (
-    <>
-      <header
-        className={`header${isScrolled ? ' header--scrolled' : ''}`}
-      >
-        <div className="header-top">
-          <div className="header-top-start">
-            <HeaderMenuMobileToggle />
-          </div>
-          <div className="header-top-brand">
-            <NavLink
-              prefetch="viewport"
-              to="/"
-              style={activeLinkStyle}
-              end
-              className="header-logo-link"
-            >
-              <div className="header-logo">
-                <img src={logo} alt={shop.name} className="logo-image" />
-              </div>
-            </NavLink>
-            <HeaderNavTabs />
-          </div>
-
-          <div className="header-top-end">
-            <HeaderCtas isLoggedIn={isLoggedIn} cart={cart} />
-          </div>
+    <header
+      className={`site-header${isScrolled ? ' site-header--scrolled' : ''}`}
+    >
+      <div className="site-header-top">
+        <div className="site-header-top-start">
+          <HeaderMenuMobileToggle />
+          <NavLink
+            prefetch="viewport"
+            to="/"
+            end
+            className="site-header-logo-link"
+          >
+            <div className="site-header-logo">
+              <img src={logo} alt={shop.name} className="logo-image" />
+            </div>
+          </NavLink>
         </div>
-      </header>
-    </>
+
+        <HeaderSearchBar />
+
+        <div className="site-header-top-end">
+          <HeaderSearchMobile />
+          <a className="site-header-phone" href={HEADER_PHONE.href}>
+            <span className="site-header-phone-icon" aria-hidden>
+              <Phone size={16} strokeWidth={2.25} />
+            </span>
+            <span className="site-header-phone-copy">
+              <span className="site-header-phone-label">
+                {HEADER_PHONE.label}
+              </span>
+              <span className="site-header-phone-number">
+                {HEADER_PHONE.display}
+              </span>
+            </span>
+          </a>
+          <HeaderCtas isLoggedIn={isLoggedIn} cart={cart} />
+        </div>
+      </div>
+
+      <HeaderBottomNav />
+    </header>
   );
 }
 
-function HeaderNavTabs() {
+function HeaderSearchBar() {
+  const {open} = useAside();
+  return (
+    <button
+      type="button"
+      className="site-header-search"
+      onClick={() => open('search')}
+      aria-label="Search transfers, gang sheets, blanks"
+    >
+      <Search size={18} strokeWidth={2.25} aria-hidden />
+      <span className="site-header-search-placeholder">
+        Search transfers, gang sheets, blanks…
+      </span>
+    </button>
+  );
+}
+
+function HeaderSearchMobile() {
+  const {open} = useAside();
+  return (
+    <button
+      type="button"
+      className="site-header-search-mobile"
+      onClick={() => open('search')}
+      aria-label="Search"
+    >
+      <Search size={18} strokeWidth={2.25} aria-hidden />
+    </button>
+  );
+}
+
+function HeaderBottomNav() {
   const {pathname} = useLocation();
   const [openId, setOpenId] = useState(/** @type {string | null} */ (null));
   const navRef = useRef(/** @type {HTMLElement | null} */ (null));
+  const closeTimer = useRef(/** @type {number | null} */ (null));
 
   useEffect(() => {
     setOpenId(null);
   }, [pathname]);
 
   useEffect(() => {
-    if (!openId) return;
+    if (!openId) return undefined;
     /** @param {MouseEvent} e */
     function onDoc(e) {
       if (!navRef.current?.contains(/** @type {Node} */ (e.target))) {
@@ -131,115 +307,441 @@ function HeaderNavTabs() {
     };
   }, [openId]);
 
-  return (
-    <nav
-      ref={navRef}
-      className="header-nav-tabs"
-      aria-label="Shop categories"
-    >
-      {HEADER_PRIMARY_NAV.map((group) => {
-        const isCurrent = group.children.some((c) =>
-          pathMatchesCollection(pathname, c.url),
-        );
-        const isOpen = openId === group.id;
+  /**
+   * @param {string | null} id
+   */
+  function scheduleOpen(id) {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    setOpenId(id);
+  }
 
-        return (
-          <div
-            key={group.id}
-            className={`header-nav-dropdown ${isOpen ? 'is-open' : ''} ${
-              isCurrent ? 'is-current' : ''
-            }`}
-            onMouseEnter={() => setOpenId(group.id)}
-            onMouseLeave={() => setOpenId(null)}
-          >
-            <button
-              type="button"
-              className={`header-nav-tab header-nav-tab--trigger ${
-                isCurrent ? 'header-nav-tab--current' : ''
-              }`}
-              aria-expanded={isOpen}
-              aria-haspopup="true"
-              onClick={() =>
-                setOpenId((prev) => (prev === group.id ? null : group.id))
-              }
+  function scheduleClose() {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setOpenId(null), 140);
+  }
+
+  return (
+    <div className="site-header-nav-wrap">
+      <nav
+        ref={navRef}
+        className="site-header-nav"
+        aria-label="Primary"
+      >
+        {HEADER_PRIMARY_NAV.map((item) => {
+          const hasMega = Boolean(item.mega);
+          const isOpen = openId === item.id;
+
+          if (!hasMega) {
+            return (
+              <NavLink
+                key={item.id}
+                prefetch="intent"
+                to={item.href || '/'}
+                className="site-header-nav-link"
+              >
+                {item.title}
+              </NavLink>
+            );
+          }
+
+          return (
+            <div
+              key={item.id}
+              className={[
+                'site-header-nav-item',
+                isOpen && 'is-open',
+                'has-panel-mega',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onMouseEnter={() => scheduleOpen(item.id)}
+              onMouseLeave={scheduleClose}
             >
-              {group.title}
-              <ChevronDown
-                size={16}
-                strokeWidth={2.25}
-                className="header-nav-tab-chevron"
-                aria-hidden
-              />
-            </button>
-            <div className="header-nav-dropdown-panel" role="menu">
-              <p className="header-nav-dropdown-blurb">{group.blurb}</p>
-              <ul className="header-nav-dropdown-list">
-                {group.children.map((child) => (
-                  <li key={child.url}>
-                    <NavLink
-                      prefetch="intent"
-                      to={child.url}
-                      role="menuitem"
-                      className={({isActive}) =>
-                        [
-                          'header-nav-dropdown-link',
-                          isActive && 'is-active',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')
-                      }
-                      onClick={() => setOpenId(null)}
-                    >
-                      {child.title}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                className="site-header-nav-link site-header-nav-link--trigger"
+                aria-expanded={isOpen}
+                aria-haspopup="true"
+                onClick={() =>
+                  setOpenId((prev) => (prev === item.id ? null : item.id))
+                }
+              >
+                {item.title}
+                <ChevronDown
+                  size={14}
+                  strokeWidth={2.5}
+                  className="site-header-nav-chevron"
+                  aria-hidden
+                />
+              </button>
+              {isOpen ? (
+                <div
+                  className={`site-header-mega ${
+                    item.mega === 'list'
+                      ? 'site-header-mega--panel'
+                      : 'site-header-mega--wide'
+                  }`}
+                  role="menu"
+                  onMouseEnter={() => scheduleOpen(item.id)}
+                  onMouseLeave={scheduleClose}
+                >
+                  <MegaPanel item={item} onNavigate={() => setOpenId(null)} />
+                </div>
+              ) : null}
             </div>
-          </div>
-        );
-      })}
-    </nav>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 
-function HeaderSearchToggle() {
-  const {open} = useAside();
+/**
+ * @param {{
+ *   item: (typeof HEADER_PRIMARY_NAV)[number];
+ *   onNavigate: () => void;
+ * }} props
+ */
+function MegaPanel({item, onNavigate}) {
+  if (item.mega === 'dtf') {
+    return <DtfMegaPanel onNavigate={onNavigate} />;
+  }
+  if (item.mega === 'blank') {
+    return (
+      <ApparelMegaPanel
+        title="Blank apparel."
+        lede="Shop by garment or brand."
+        cta={{label: 'View all blanks', href: '/collections/t-shirts'}}
+        garmentHint="T-shirts, fleece, and more"
+        brandHint="Four brands, one catalog"
+        garments={APPAREL_CATEGORY_HANDLES.map((c) => ({
+          title: c.title,
+          blurb: c.blurb,
+          url: `/collections/${c.handle}`,
+        }))}
+        brands={APPAREL_BRAND_LINKS.map((b) => ({
+          title: b.title,
+          blurb: b.blurb,
+          url: `/collections/${b.handle}`,
+        }))}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+  if (item.mega === 'decorated') {
+    return (
+      <ApparelMegaPanel
+        title="Decorated apparel."
+        lede="Shop by garment or brand."
+        cta={{
+          label: 'View all decorated',
+          href: '/collections/t-shirts-decorated',
+        }}
+        garmentHint="Ready for custom logos"
+        brandHint="Popular decorate-ready brands"
+        garments={APPAREL_CATEGORY_HANDLES.map((c) => ({
+          title: c.title,
+          blurb: c.blurb,
+          url: `/collections/${c.handle}-decorated`,
+        }))}
+        brands={APPAREL_BRAND_LINKS.map((b) => ({
+          title: b.title,
+          blurb: b.blurb,
+          url: `/collections/${b.handle}`,
+        }))}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
   return (
-    <button
-      type="button"
-      className="header-icon-btn"
-      onClick={() => open('search')}
-      aria-label="Open search"
-    >
-      <Search size={22} strokeWidth={2} aria-hidden />
-    </button>
+    <ListMegaPanel
+      title={item.title}
+      lede={item.blurb || ''}
+      items={item.children || []}
+      onNavigate={onNavigate}
+    />
   );
 }
 
-function HeaderRewards() {
+/**
+ * @param {{ onNavigate: () => void }} props
+ */
+function DtfMegaPanel({onNavigate}) {
   return (
-    <div className="header-rewards">
-      <div className="header-rewards-icon">
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+    <div className="site-mega site-mega--dtf">
+      <header className="site-mega-head">
+        <div>
+          <h2 className="site-mega-title">Choose how to order.</h2>
+          <p className="site-mega-lede">
+            Start with individual files or a finished gang sheet.
+          </p>
+        </div>
+        <Link
+          to="/dtf-sheets"
+          className="site-mega-cta"
+          onClick={onNavigate}
+          prefetch="intent"
         >
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <path d="M12 8v8" />
-          <path d="M8 12h8" />
-        </svg>
+          Start an order
+          <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+        </Link>
+      </header>
+
+      <div className="site-mega-grid site-mega-grid--dtf">
+        <section className="site-mega-col" aria-label="Order path">
+          <div className="site-mega-col-label-row">
+            <p className="site-mega-col-label">Order path</p>
+            <span className="site-mega-pill">No minimums</span>
+          </div>
+          <ul className="site-mega-path-list">
+            <li>
+              <Link
+                to="/dtf-sheets/by-size"
+                className="site-mega-path-card"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span className="site-mega-path-copy">
+                  <span className="site-mega-path-badge">No layout required</span>
+                  <strong>Order individual designs</strong>
+                  <span>
+                    Upload each design. Choose its finished size and quantity.
+                  </span>
+                </span>
+                <ArrowRight size={16} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dtf-sheets/builder"
+                className="site-mega-path-card"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span className="site-mega-path-copy">
+                  <span className="site-mega-path-badge">Print-ready file</span>
+                  <strong>Build a gang sheet online</strong>
+                  <span>
+                    Arrange artwork on a 22″ sheet and send one print-ready
+                    layout.
+                  </span>
+                </span>
+                <ArrowRight size={16} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+          </ul>
+          <p className="site-mega-footnote">
+            Made in USA · No minimums · Ships nationwide
+          </p>
+        </section>
+
+        <section className="site-mega-col" aria-label="More ways to start">
+          <p className="site-mega-col-label">More ways to start</p>
+          <ul className="site-mega-link-list">
+            <li>
+              <Link
+                to="/free-sample"
+                className="site-mega-text-link"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span>
+                  <strong>Get a free sample</strong>
+                  <span>Press it before you buy.</span>
+                </span>
+                <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/dtf-sheets/studio"
+                className="site-mega-text-link"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span>
+                  <strong>Open the studio</strong>
+                  <span>Jump straight into the gang sheet builder.</span>
+                </span>
+                <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/collections/t-shirts"
+                className="site-mega-text-link"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span>
+                  <strong>Shop blank apparel</strong>
+                  <span>Pair transfers with garments from the catalog.</span>
+                </span>
+                <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+          </ul>
+        </section>
       </div>
-      <div className="header-rewards-text">
-        <div className="header-rewards-label">Plus 1 Rewards</div>
-        <div className="header-rewards-balance">$0.00</div>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   title: string;
+ *   lede: string;
+ *   cta: { label: string; href: string };
+ *   garmentHint?: string;
+ *   brandHint?: string;
+ *   garments: Array<{ title: string; blurb?: string; url: string }>;
+ *   brands: Array<{ title: string; blurb?: string; url: string }>;
+ *   onNavigate: () => void;
+ * }} props
+ */
+function ApparelMegaPanel({
+  title,
+  lede,
+  cta,
+  garmentHint = 'T-shirts, fleece, and more',
+  brandHint = 'Four brands, one catalog',
+  garments,
+  brands,
+  onNavigate,
+}) {
+  return (
+    <div className="site-mega site-mega--apparel">
+      <header className="site-mega-head">
+        <div>
+          <h2 className="site-mega-title">{title}</h2>
+          <p className="site-mega-lede">{lede}</p>
+        </div>
+        <Link
+          to={cta.href}
+          className="site-mega-cta"
+          onClick={onNavigate}
+          prefetch="intent"
+        >
+          {cta.label}
+          <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+        </Link>
+      </header>
+
+      <div className="site-mega-grid site-mega-grid--apparel">
+        <section className="site-mega-col" aria-label="Shop by garment">
+          <div className="site-mega-col-label-row">
+            <p className="site-mega-col-label">Shop by garment</p>
+            <span className="site-mega-col-hint">{garmentHint}</span>
+          </div>
+          <ul className="site-mega-row-list">
+            {garments.map((item) => (
+              <li key={item.url}>
+                <Link
+                  to={item.url}
+                  className="site-mega-row-link"
+                  onClick={onNavigate}
+                  prefetch="intent"
+                >
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.blurb ? <span>{item.blurb}</span> : null}
+                  </span>
+                  <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="site-mega-col" aria-label="Shop by brand">
+          <div className="site-mega-col-label-row">
+            <p className="site-mega-col-label">Shop by brand</p>
+            <span className="site-mega-col-hint">{brandHint}</span>
+          </div>
+          <ul className="site-mega-row-list">
+            {brands.map((item) => (
+              <li key={item.url}>
+                <Link
+                  to={item.url}
+                  className="site-mega-row-link"
+                  onClick={onNavigate}
+                  prefetch="intent"
+                >
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.blurb ? <span>{item.blurb}</span> : null}
+                  </span>
+                  <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   title: string;
+ *   lede: string;
+ *   items: Array<{ title: string; url: string; blurb?: string }>;
+ *   onNavigate: () => void;
+ * }} props
+ */
+function ListMegaPanel({title, lede, items, onNavigate}) {
+  return (
+    <div className="site-mega site-mega--list">
+      <header className="site-mega-head site-mega-head--compact">
+        <div>
+          <h2 className="site-mega-title">{title}</h2>
+          {lede ? <p className="site-mega-lede">{lede}</p> : null}
+        </div>
+      </header>
+      <ul className="site-mega-link-list">
+        {items.map((item) => {
+          const external =
+            item.url.startsWith('mailto:') || item.url.startsWith('tel:');
+          if (external) {
+            return (
+              <li key={item.url}>
+                <a
+                  href={item.url}
+                  className="site-mega-text-link"
+                  onClick={onNavigate}
+                >
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.blurb ? <span>{item.blurb}</span> : null}
+                  </span>
+                  <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+                </a>
+              </li>
+            );
+          }
+          return (
+            <li key={item.url}>
+              <Link
+                to={item.url}
+                className="site-mega-text-link"
+                onClick={onNavigate}
+                prefetch="intent"
+              >
+                <span>
+                  <strong>{item.title}</strong>
+                  {item.blurb ? <span>{item.blurb}</span> : null}
+                </span>
+                <ArrowRight size={15} strokeWidth={2.5} aria-hidden />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -269,13 +771,64 @@ export function HeaderMenu({
           end
           onClick={close}
           prefetch="viewport"
-          style={activeLinkStyle}
+          className="header-menu-item"
           to="/"
         >
           Home
         </NavLink>
       )}
       {HEADER_PRIMARY_NAV.map((group) => {
+        const children =
+          group.mega === 'blank'
+            ? [
+                ...APPAREL_CATEGORY_HANDLES.map((c) => ({
+                  title: c.title,
+                  url: `/collections/${c.handle}`,
+                })),
+                ...APPAREL_BRAND_LINKS.map((b) => ({
+                  title: b.title,
+                  url: `/collections/${b.handle}`,
+                })),
+              ]
+            : group.mega === 'decorated'
+              ? [
+                  ...APPAREL_CATEGORY_HANDLES.map((c) => ({
+                    title: c.title,
+                    url: `/collections/${c.handle}-decorated`,
+                  })),
+                  ...APPAREL_BRAND_LINKS.map((b) => ({
+                    title: b.title,
+                    url: `/collections/${b.handle}`,
+                  })),
+                ]
+              : group.mega === 'dtf'
+                ? [
+                    {title: 'Choose how to order', url: '/dtf-sheets'},
+                    {title: 'Transfers by size', url: '/dtf-sheets/by-size'},
+                    {title: 'Gang sheet builder', url: '/dtf-sheets/builder'},
+                    {title: 'Gang sheet studio', url: '/dtf-sheets/studio'},
+                    {title: 'Get a free sample', url: '/free-sample'},
+                  ]
+                : group.children ||
+                  (group.href
+                    ? [{title: group.title, url: group.href}]
+                    : []);
+
+        if (!group.mega && group.href) {
+          return (
+            <NavLink
+              key={group.id}
+              className="header-menu-item"
+              end
+              onClick={close}
+              prefetch="intent"
+              to={group.href}
+            >
+              {group.title}
+            </NavLink>
+          );
+        }
+
         const expanded = openId === group.id;
         return (
           <div key={group.id} className="header-menu-mobile-group">
@@ -293,9 +846,11 @@ export function HeaderMenu({
                 <span className="header-menu-mobile-group-title">
                   {group.title}
                 </span>
-                <span className="header-menu-mobile-group-blurb">
-                  {group.blurb}
-                </span>
+                {group.blurb ? (
+                  <span className="header-menu-mobile-group-blurb">
+                    {group.blurb}
+                  </span>
+                ) : null}
               </span>
               <ChevronDown
                 size={18}
@@ -306,19 +861,35 @@ export function HeaderMenu({
             </button>
             {expanded ? (
               <div className="header-menu-mobile-group-links">
-                {group.children.map((child) => (
-                  <NavLink
-                    key={child.url}
-                    className="header-menu-item"
-                    end
-                    onClick={close}
-                    prefetch="intent"
-                    style={activeLinkStyle}
-                    to={child.url}
-                  >
-                    {child.title}
-                  </NavLink>
-                ))}
+                {children.map((child) => {
+                  if (
+                    child.url.startsWith('mailto:') ||
+                    child.url.startsWith('tel:')
+                  ) {
+                    return (
+                      <a
+                        key={child.url}
+                        className="header-menu-item"
+                        href={child.url}
+                        onClick={close}
+                      >
+                        {child.title}
+                      </a>
+                    );
+                  }
+                  return (
+                    <NavLink
+                      key={child.url}
+                      className="header-menu-item"
+                      end
+                      onClick={close}
+                      prefetch="intent"
+                      to={child.url}
+                    >
+                      {child.title}
+                    </NavLink>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -364,343 +935,57 @@ export function HeaderMenu({
 }
 
 /**
- * @param {string} pathname
- * @param {string} collectionUrl e.g. /collections/t-shirts
- */
-function pathMatchesCollection(pathname, collectionUrl) {
-  const path = String(pathname || '').replace(/\/$/, '') || '/';
-  const target = String(collectionUrl || '').replace(/\/$/, '');
-  return path === target || path.endsWith(target);
-}
-
-// Mega-menu archive (commented out for early release). To restore: uncomment the block below,
-// switch HeaderMenu to map HeaderMenuItem + dropdown navigationItems, add useState to the react import.
-
-// /**
-//  * Header menu item with dropdown support
-//  */
-// function HeaderMenuItem({ item, close, activeLinkStyle }) {
-//   const [isHovered, setIsHovered] = useState(false);
-// 
-//   return (
-//     <div
-//       className="header-menu-item-wrapper"
-//       onMouseEnter={() => setIsHovered(true)}
-//       onMouseLeave={() => setIsHovered(false)}
-//     >
-//       <NavLink
-//         className="header-menu-item"
-//         end
-//         onClick={close}
-//         prefetch="intent"
-//         to={item.url}
-//       >
-//         {item.title}
-//       </NavLink>
-//       {item.hasDropdown && (
-//         <>
-//           <svg
-//             className="header-menu-chevron"
-//             width="14"
-//             height="14"
-//             viewBox="0 0 14 14"
-//             fill="none"
-//             stroke="currentColor"
-//             strokeWidth="2"
-//             strokeLinecap="round"
-//             strokeLinejoin="round"
-//           >
-//             <path d="M3.5 5.25l3.5 3.5 3.5-3.5" />
-//           </svg>
-//           {isHovered && item.dropdownContent === 'tshirts' && (
-//             <>
-//               <div
-//                 className="header-menu-dropdown-bridge"
-//                 onMouseEnter={() => setIsHovered(true)}
-//               />
-//               <TShirtsDropdown
-//                 onMouseEnter={() => setIsHovered(true)}
-//                 onMouseLeave={() => setIsHovered(false)}
-//                 onLinkClick={() => setIsHovered(false)}
-//               />
-//             </>
-//           )}
-//           {isHovered && item.dropdownContent === 'sweatshirts' && (
-//             <>
-//               <div
-//                 className="header-menu-dropdown-bridge"
-//                 onMouseEnter={() => setIsHovered(true)}
-//               />
-//               <SweatshirtsDropdown
-//                 onMouseEnter={() => setIsHovered(true)}
-//                 onMouseLeave={() => setIsHovered(false)}
-//                 onLinkClick={() => setIsHovered(false)}
-//               />
-//             </>
-//           )}
-//           {isHovered && item.dropdownContent === 'more' && (
-//             <>
-//               <div
-//                 className="header-menu-dropdown-bridge"
-//                 onMouseEnter={() => setIsHovered(true)}
-//               />
-//               <MoreDropdown
-//                 onMouseEnter={() => setIsHovered(true)}
-//                 onMouseLeave={() => setIsHovered(false)}
-//                 onLinkClick={() => setIsHovered(false)}
-//               />
-//             </>
-//           )}
-//         </>
-//       )}
-//     </div>
-//   );
-// }
-// 
-// /**
-//  * T-Shirts dropdown menu component
-//  */
-// function TShirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-//   return (
-//     <div
-//       className="header-menu-dropdown"
-//       onMouseEnter={onMouseEnter}
-//       onMouseLeave={onMouseLeave}
-//     >
-//       <div className="header-menu-dropdown-content">
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li>
-//               <NavLink to="/collections/short-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//                 Short Sleeve
-//                 <span className="header-menu-dropdown-badge">Popular</span>
-//               </NavLink>
-//             </li>
-//             <li><NavLink to="/collections/long-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Long Sleeve</NavLink></li>
-//             <li><NavLink to="/collections/3-4-sleeve-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>3/4 Sleeve</NavLink></li>
-//             <li><NavLink to="/collections/raglan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Raglan</NavLink></li>
-//             <li><NavLink to="/collections/tank-tops" className="header-menu-dropdown-link" onClick={onLinkClick}>Tank Tops</NavLink></li>
-//             <li><NavLink to="/collections/performance-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
-//             <li><NavLink to="/collections/safety-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY FIT</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/unisex-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex Adult</NavLink></li>
-//             <li><NavLink to="/collections/mens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
-//             <li><NavLink to="/collections/womens-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
-//             <li><NavLink to="/collections/youth-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
-//             <li><NavLink to="/collections/toddler-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Toddler</NavLink></li>
-//             <li><NavLink to="/collections/infant-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Infant</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/cotton-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
-//             <li><NavLink to="/collections/polyester-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
-//             <li><NavLink to="/collections/cotton-poly-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
-//             <li><NavLink to="/collections/tri-blend-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/gildan-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
-//             <li><NavLink to="/collections/bella-canvas-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
-//             <li><NavLink to="/collections/next-level-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
-//             <li><NavLink to="/collections/comfort-colors-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
-//             <li><NavLink to="/collections/champion-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
-//             <li><NavLink to="/collections/jerzees-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
-//             <li><NavLink to="/collections/hanes-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
-//             <li><NavLink to="/collections/team-365-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Team 365</NavLink></li>
-//             <li><NavLink to="/collections/all-brands-t-shirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
-//           </ul>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-// 
-// /**
-//  * Sweatshirts dropdown menu component
-//  */
-// function SweatshirtsDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-//   return (
-//     <div
-//       className="header-menu-dropdown"
-//       onMouseEnter={onMouseEnter}
-//       onMouseLeave={onMouseLeave}
-//     >
-//       <div className="header-menu-dropdown-content">
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY STYLE</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li>
-//               <NavLink to="/collections/hoodies" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//                 Hoodies
-//                 <span className="header-menu-dropdown-badge">Popular</span>
-//               </NavLink>
-//             </li>
-//             <li><NavLink to="/collections/crewneck-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Crewneck</NavLink></li>
-//             <li><NavLink to="/collections/zip-up-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Zip Up</NavLink></li>
-//             <li><NavLink to="/collections/performance-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Performance</NavLink></li>
-//             <li><NavLink to="/collections/safety-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Safety</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY FIT</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/unisex-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Unisex</NavLink></li>
-//             <li><NavLink to="/collections/mens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Men's</NavLink></li>
-//             <li><NavLink to="/collections/womens-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Women's</NavLink></li>
-//             <li><NavLink to="/collections/youth-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Youth</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY MATERIAL</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/cotton-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Cotton</NavLink></li>
-//             <li><NavLink to="/collections/polyester-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>100% Polyester</NavLink></li>
-//             <li><NavLink to="/collections/cotton-poly-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Cotton/Poly Blend</NavLink></li>
-//             <li><NavLink to="/collections/tri-blend-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Tri-Blend</NavLink></li>
-//           </ul>
-//         </div>
-//         <div className="header-menu-dropdown-column">
-//           <div className="header-menu-dropdown-header">SHOP BY BRAND</div>
-//           <ul className="header-menu-dropdown-list">
-//             <li><NavLink to="/collections/gildan-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Gildan</NavLink></li>
-//             <li><NavLink to="/collections/hanes-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Hanes</NavLink></li>
-//             <li><NavLink to="/collections/jerzees-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Jerzees</NavLink></li>
-//             <li><NavLink to="/collections/bella-canvas-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Bella + Canvas</NavLink></li>
-//             <li><NavLink to="/collections/champion-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Champion</NavLink></li>
-//             <li><NavLink to="/collections/next-level-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Next Level</NavLink></li>
-//             <li><NavLink to="/collections/threadfast-apparel-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Threadfast Apparel</NavLink></li>
-//             <li><NavLink to="/collections/j-america-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>J America</NavLink></li>
-//             <li><NavLink to="/collections/comfort-colors-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>Comfort Colors</NavLink></li>
-//             <li><NavLink to="/collections/all-brands-sweatshirts" className="header-menu-dropdown-link" onClick={onLinkClick}>View All Brands</NavLink></li>
-//           </ul>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-// 
-// /**
-//  * More dropdown menu component
-//  */
-// function MoreDropdown({ onMouseEnter, onMouseLeave, onLinkClick }) {
-//   return (
-//     <div
-//       className="header-menu-dropdown header-menu-dropdown-more"
-//       onMouseEnter={onMouseEnter}
-//       onMouseLeave={onMouseLeave}
-//     >
-//       <div className="header-menu-dropdown-content header-menu-dropdown-single-column">
-//         <ul className="header-menu-dropdown-list">
-//           <li>
-//             <NavLink to="/collections/accessories" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Accessories
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-drinkware-hard-goods" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Drinkware & Hard Goods
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-toddler-infant-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Toddler & Infant Apparel
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-kids-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Kids Apparel
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-pants" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Pants
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-shorts" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Shorts
-//             </NavLink>
-//           </li>
-//           <li>
-//             <NavLink to="/collections/blank-womens-apparel" className="header-menu-dropdown-link" onClick={onLinkClick}>
-//               Blank Women's Apparel
-//             </NavLink>
-//           </li>
-//         </ul>
-//       </div>
-//     </div>
-//   );
-// }
-
-/**
  * @param {Pick<HeaderProps, 'isLoggedIn' | 'cart'>}
  */
-function HeaderCtas({ isLoggedIn, cart }) {
+function HeaderCtas({isLoggedIn, cart}) {
   return (
-    <nav className="header-ctas" role="navigation" aria-label="Account and utilities">
-      <HeaderSearchToggle />
-      <CartToggle cart={cart} />
+    <nav
+      className="site-header-ctas"
+      role="navigation"
+      aria-label="Account and cart"
+    >
       <Suspense fallback={<AccountControls isLoggedIn={false} />}>
-        <Await resolve={isLoggedIn} errorElement={<AccountControls isLoggedIn={false} />}>
+        <Await
+          resolve={isLoggedIn}
+          errorElement={<AccountControls isLoggedIn={false} />}
+        >
           {(loggedIn) => <AccountControls isLoggedIn={loggedIn} />}
         </Await>
       </Suspense>
-      <SolidButton
-        href={HEADER_GET_IN_TOUCH_MAILTO}
-        compact
-        className="header-get-in-touch"
-      >
-        Get in Touch
-      </SolidButton>
+      <CartToggle cart={cart} />
     </nav>
   );
 }
 
-function AccountControls({ isLoggedIn }) {
+/**
+ * @param {{ isLoggedIn: boolean }}
+ */
+function AccountControls({isLoggedIn}) {
   const accountPath = isLoggedIn ? '/account' : '/account/login?redirect=1';
-  const accountLabel = isLoggedIn ? 'My account' : 'Log in';
+  const accountLabel = isLoggedIn ? 'Account' : 'Sign In';
 
   return (
-    <>
-      <NavLink
-        prefetch={isLoggedIn ? 'intent' : false}
-        to={accountPath}
-        reloadDocument={!isLoggedIn}
-        className="header-icon-btn header-account-icon"
-        aria-label={accountLabel}
-      >
-        <User size={22} strokeWidth={2} aria-hidden />
-      </NavLink>
-      <NavLink
-        prefetch={isLoggedIn ? 'intent' : false}
-        to={accountPath}
-        reloadDocument={!isLoggedIn}
-        className="header-login-link"
-        style={activeLinkStyle}
-      >
-        {isLoggedIn ? 'Account' : 'Login'}
-      </NavLink>
-    </>
+    <NavLink
+      prefetch={isLoggedIn ? 'intent' : false}
+      to={accountPath}
+      reloadDocument={!isLoggedIn}
+      className="site-header-action"
+      aria-label={accountLabel}
+    >
+      <User size={16} strokeWidth={2.25} aria-hidden />
+      <span>{accountLabel}</span>
+    </NavLink>
   );
 }
 
 function HeaderMenuMobileToggle() {
-  const { open, type, close } = useAside();
+  const {open, type, close} = useAside();
   const menuOpen = type === 'mobile';
 
   return (
     <button
       type="button"
-      className="header-menu-mobile-toggle header-icon-btn reset"
+      className="site-header-mobile-toggle"
       onClick={() => (menuOpen ? close() : open('mobile'))}
       aria-label={menuOpen ? 'Close menu' : 'Open menu'}
       aria-expanded={menuOpen}
@@ -711,18 +996,17 @@ function HeaderMenuMobileToggle() {
   );
 }
 
-
 /**
  * @param {{count: number | null}}
  */
-function CartBadge({ count }) {
-  const { publish, shop, cart, prevCart } = useAnalytics();
+function CartBadge({count}) {
+  const {publish, shop, cart, prevCart} = useAnalytics();
 
   return (
     <Link
       to="/cart"
       prefetch="intent"
-      className="header-icon-btn header-cart-link"
+      className="site-header-action site-header-cart"
       onClick={() => {
         publish('cart_viewed', {
           cart,
@@ -732,23 +1016,11 @@ function CartBadge({ count }) {
         });
       }}
     >
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="9" cy="21" r="1"></circle>
-        <circle cx="20" cy="21" r="1"></circle>
-        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-      </svg>
-      {count !== null && count > 0 && (
-        <span className="header-cart-badge">{count}</span>
-      )}
+      <ShoppingCart size={16} strokeWidth={2.25} aria-hidden />
+      <span>Cart</span>
+      {count !== null && count > 0 ? (
+        <span className="site-header-cart-badge">{count}</span>
+      ) : null}
     </Link>
   );
 }
@@ -756,7 +1028,7 @@ function CartBadge({ count }) {
 /**
  * @param {Pick<HeaderProps, 'cart'>}
  */
-function CartToggle({ cart }) {
+function CartToggle({cart}) {
   return (
     <Suspense fallback={<CartBadge count={null} />}>
       <Await resolve={cart}>
@@ -791,61 +1063,6 @@ function CartBanner() {
       : 0;
   const count = fromTotal || fromLines || fallbackTotal || fallbackLines;
   return <CartBadge count={count} />;
-}
-
-const FALLBACK_HEADER_MENU = {
-  id: 'gid://shopify/Menu/199655587896',
-  items: [
-    {
-      id: 'gid://shopify/MenuItem/461609500728',
-      resourceId: null,
-      tags: [],
-      title: 'Collections',
-      type: 'HTTP',
-      url: '/collections',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461609533496',
-      resourceId: null,
-      tags: [],
-      title: 'News',
-      type: 'HTTP',
-      url: '/blogs',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461609566264',
-      resourceId: null,
-      tags: [],
-      title: 'Policies',
-      type: 'HTTP',
-      url: '/policies',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461609599032',
-      resourceId: 'gid://shopify/Page/92591030328',
-      tags: [],
-      title: 'About',
-      type: 'PAGE',
-      url: '/pages/about',
-      items: [],
-    },
-  ],
-};
-
-/**
- * @param {{
- *   isActive: boolean;
- *   isPending: boolean;
- * }}
- */
-function activeLinkStyle({ isActive, isPending }) {
-  return {
-    fontWeight: isActive ? 'bold' : undefined,
-    color: isPending ? 'grey' : 'black',
-  };
 }
 
 /** @typedef {'desktop' | 'mobile'} Viewport */

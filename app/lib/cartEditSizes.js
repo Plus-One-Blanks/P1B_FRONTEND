@@ -3,6 +3,8 @@
  * Used by CartLineItem, CartEditSizesModal, and cart-edit-sizes route.
  */
 
+import {readGangSheetFromLineAttributes} from '~/lib/dtfGangSheetOrderAttributes';
+
 /**
  * @param {string} name
  */
@@ -150,9 +152,15 @@ export function sameNonSizeSelection(a, b) {
 
 /**
  * Stable key: same product + same color (and other non-size options) → one cart card.
+ * Gang sheets stay separate — each unique packet is its own line card.
  * @param {{ id?: string; attributes?: Array<{ key?: string; value?: string }>; merchandise?: { id?: string; title?: string; product?: { handle?: string; title?: string }; selectedOptions?: Array<{ name: string; value: string }> } }} line
  */
 export function getCartLineGroupKey(line) {
+  const gang = readGangSheetFromLineAttributes(line?.attributes);
+  if (gang?.id) {
+    return `gangSheet::${gang.id}`;
+  }
+
   const m = line?.merchandise;
   if (!m || typeof m !== 'object' || !m.product?.handle) {
     return String(line?.id ?? '');

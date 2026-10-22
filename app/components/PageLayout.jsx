@@ -1,10 +1,11 @@
 import {Await, Link, useFetcher, useLocation} from 'react-router';
-import {Suspense, useEffect, useLayoutEffect, useRef} from 'react';
+import {Suspense, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Aside, useAside} from '~/components/Aside';
 import {Footer} from '~/components/Footer';
 import {Header, HeaderMenu} from '~/components/Header';
 import logo from '~/assets/logo.svg';
 import {CartMain} from '~/components/CartMain';
+import {CartSkeleton, ContentReveal} from '~/components/LoadingUI';
 import {SearchDrawer} from '~/components/SearchDrawer';
 
 /**
@@ -18,26 +19,33 @@ export function PageLayout({
   isLoggedIn,
   publicStoreDomain,
 }) {
+  const {pathname} = useLocation();
+  const isDtfStudio = /\/dtf-sheets\/studio\/?$/.test(pathname);
+
   return (
     <Aside.Provider>
       <CloseAsideOnLocationChange />
       <CartAside cart={cart} />
       <SearchAside header={header} />
       <MobileMenuAside header={header} publicStoreDomain={publicStoreDomain} />
-      {header && (
+      {!isDtfStudio && header ? (
         <Header
           header={header}
           cart={cart}
           isLoggedIn={isLoggedIn}
           publicStoreDomain={publicStoreDomain}
         />
-      )}
-      <main>{children}</main>
-      <Footer
-        footer={footer}
-        header={header}
-        publicStoreDomain={publicStoreDomain}
-      />
+      ) : null}
+      <main className={isDtfStudio ? 'main--dtf-studio' : undefined}>
+        {children}
+      </main>
+      {!isDtfStudio ? (
+        <Footer
+          footer={footer}
+          header={header}
+          publicStoreDomain={publicStoreDomain}
+        />
+      ) : null}
     </Aside.Provider>
   );
 }
@@ -74,32 +82,70 @@ function CloseAsideOnLocationChange() {
 }
 
 /**
- * Refetches cart when drawer opens so the drawer always shows latest data (including applied discount).
+ * Refetches cart when drawer opens. Shows a skeleton until that fetch settles
+ * so customers never see a stale or empty flash.
  * @param {{cart: PageLayoutProps['cart']}}
  */
 function CartAside({cart}) {
   const {type} = useAside();
   const fetcher = useFetcher({key: 'cart-drawer'});
+  const [ready, setReady] = useState(false);
+  const sawLoading = useRef(false);
 
   useEffect(() => {
-    if (type === 'cart') {
-      fetcher.load('/cart');
+    if (type !== 'cart') {
+      setReady(false);
+      sawLoading.current = false;
+      return;
     }
+
+    sawLoading.current = false;
+    setReady(false);
+    fetcher.load('/cart');
+
+    // If the fetcher never enters "loading" (cached/instant), reveal shortly.
+    const safety = window.setTimeout(() => {
+      if (!sawLoading.current) {
+        sawLoading.current = true;
+        setReady(true);
+      }
+    }, 120);
+
+    return () => window.clearTimeout(safety);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only when drawer opens
   }, [type]);
+
+  useEffect(() => {
+    if (type !== 'cart') return;
+    if (fetcher.state === 'loading' || fetcher.state === 'submitting') {
+      sawLoading.current = true;
+      setReady(false);
+      return;
+    }
+    if (fetcher.state === 'idle' && sawLoading.current) {
+      setReady(true);
+    }
+  }, [type, fetcher.state]);
 
   return (
     <Aside type="cart" heading={null}>
-      <Suspense fallback={<p>Loading cart ...</p>}>
-        <Await resolve={cart}>
-          {(resolvedCart) => {
-            const cartToShow =
-              fetcher.state === 'idle' && fetcher.data != null
-                ? fetcher.data
-                : resolvedCart;
-            return <CartMain cart={cartToShow} layout="aside" />;
-          }}
-        </Await>
-      </Suspense>
+      {!ready ? (
+        <CartSkeleton layout="aside" />
+      ) : (
+        <Suspense fallback={<CartSkeleton layout="aside" />}>
+          <Await resolve={cart}>
+            {(resolvedCart) => {
+              const cartToShow =
+                fetcher.data !== undefined ? fetcher.data : resolvedCart;
+              return (
+                <ContentReveal className="cart-aside-reveal">
+                  <CartMain cart={cartToShow} layout="aside" />
+                </ContentReveal>
+              );
+            }}
+          </Await>
+        </Suspense>
+      )}
     </Aside>
   );
 }

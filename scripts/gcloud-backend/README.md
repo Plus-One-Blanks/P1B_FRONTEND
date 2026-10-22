@@ -1,12 +1,16 @@
-# Design Studio — Google Cloud backend
+# Design Studio + DTF gang sheets — Google Cloud backend
 
-Clean Node.js Cloud Functions for the Plus One **design studio**:
+Single Cloud Functions / Cloud Run service for Plus One **Design Studio** and **DTF gang sheets** (same GCP project `plus-one-blanks-d09a5`).
 
-| Function | Method | Purpose |
-|----------|--------|---------|
-| `removeBackground` | POST | Clean logo cutout (`@imgly/background-removal-node`) |
-| `saveDesign` | POST | Store logo + preview in **Cloud Storage**, metadata in **Firestore** |
-| `getDesign` | GET | Load a saved design by id |
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/removeBackground` | POST | Clean logo cutout (`@imgly/background-removal-node`) |
+| `/saveDesign` | POST | Store logo + preview in **Cloud Storage**, metadata in **Firestore** |
+| `/getDesign` | GET | Load a saved design by id |
+| `/admin/design` | GET | Ops packet for a design |
+| `/saveGangSheet` | POST | Store gang sheet art + preview (`gangSheets` collection) |
+| `/getGangSheet` | GET | Load a gang sheet by id |
+| `/admin/gangSheet` | GET | Ops HTML/JSON packet for print fulfillment |
 
 ## Fixed GCP project
 

@@ -77,7 +77,8 @@ function colorsMatch(a, b) {
 /**
  * Full-screen design studio for custom decorated apparel.
  *
- * Flow: color → decoration locations → artwork upload/place → print style → save.
+ * Flow: color → decoration locations → artwork (clean up large → place on
+ * garment) → print style → save.
  *
  * Note: do NOT use a raw <aside> here — global cart drawer CSS targets `aside`
  * and parks it off-screen (`right: -var(--aside-width)`).
@@ -124,6 +125,10 @@ export function DesignStudioModal({
 
   const [step, setStep] = useState(
     /** @type {'color' | 'locations' | 'artwork' | 'print'} */ ('color'),
+  );
+  /** Artwork sub-flow: clean up large art first, then place on garment */
+  const [artPhase, setArtPhase] = useState(
+    /** @type {'prep' | 'place'} */ ('prep'),
   );
   const [pendingColor, setPendingColor] = useState(() =>
     resolveStudioColorCode(colorCode, colors) || colorCode,
@@ -200,9 +205,12 @@ export function DesignStudioModal({
         setActiveLocationId(initialDesign.locations[0].id);
         setArtByLocation(hydrateArt(initialDesign));
         setPrintStyle(initialDesign.printStyle || 'simple');
+        // Editing an existing design: jump to placement; prep is one tap away
+        setArtPhase('place');
       } else {
         setSelectedLocationIds([]);
         setActiveLocationId(null);
+        setArtPhase('prep');
       }
     }
   }, [open, colorCode, initialDesign, colors]);
@@ -370,11 +378,27 @@ export function DesignStudioModal({
       clearArtHistory(activeLocationId);
       setRemoveColors([]);
       setPickMode(false);
+      // Always open large so cleanup is easy before garment placement
+      setArtPhase('prep');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setBusy(null);
     }
+  };
+
+  /**
+   * Switch active print location and pick the right artwork sub-phase.
+   * @param {string} id
+   */
+  const selectArtworkLocation = (id) => {
+    setActiveLocationId(id);
+    setError(null);
+    if (!artByLocation[id]?.logoDataUrl) {
+      setArtPhase('prep');
+      return;
+    }
+    // Keep current phase when hopping between locations that already have art
   };
 
   const handleRemoveBg = async () => {
@@ -486,6 +510,9 @@ export function DesignStudioModal({
       }
       return;
     }
+
+    // Prep canvas is for cleanup only — placement drag happens on the garment
+    if (artPhase !== 'place') return;
 
     onPointerDownLogo(e);
   };
@@ -762,7 +789,7 @@ export function DesignStudioModal({
       ro?.disconnect();
       window.removeEventListener('resize', updateFit);
     };
-  }, [open, step, displayImage?.url, garmentView]);
+  }, [open, step, artPhase, displayImage?.url, garmentView]);
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -811,15 +838,29 @@ export function DesignStudioModal({
       setLocationsNeedAttention(false);
       // Always start artwork on the first selected location (catalog L→R order)
       setActiveLocationId(orderedSelectedLocationIds[0] || selectedLocationIds[0]);
+      setArtPhase('prep');
       setStep('artwork');
       return;
     }
     if (step === 'artwork') {
+      if (artPhase === 'prep') {
+        if (!activeArt?.logoDataUrl) {
+          setError('Upload artwork for this location before placing it.');
+          return;
+        }
+        setPickMode(false);
+        setArtPhase('place');
+        return;
+      }
+
       if (!locationsReady) {
         const missing = orderedSelectedLocationIds.find(
           (id) => !artByLocation[id]?.logoDataUrl,
         );
-        if (missing) setActiveLocationId(missing);
+        if (missing) {
+          setActiveLocationId(missing);
+          setArtPhase('prep');
+        }
         setError('Upload artwork for each selected location before continuing.');
         return;
       }
@@ -832,11 +873,18 @@ export function DesignStudioModal({
   const goBack = () => {
     setError(null);
     if (step === 'locations') setStep('color');
-    else if (step === 'artwork') setStep('locations');
-    else if (step === 'print') {
+    else if (step === 'artwork') {
+      if (artPhase === 'place') {
+        setPickMode(false);
+        setArtPhase('prep');
+        return;
+      }
+      setStep('locations');
+    } else if (step === 'print') {
       setActiveLocationId(
         orderedSelectedLocationIds[0] || selectedLocationIds[0] || null,
       );
+      setArtPhase('place');
       setStep('artwork');
     }
   };
@@ -1011,99 +1059,148 @@ export function DesignStudioModal({
         ) : null}
 
         {step === 'artwork' ? (
-          <div className="design-studio-pane design-studio-pane--artwork">
+          <div
+            className={`design-studio-pane design-studio-pane--artwork${
+              artPhase === 'prep' ? ' is-art-prep' : ' is-art-place'
+            }`}
+          >
             <div className="design-studio-stage-wrap">
-              <div
-                ref={stageRef}
-                className={`design-studio-stage ${dragging ? 'is-dragging' : ''}`}
-              >
-                <div className="design-studio-stage-side" aria-live="polite">
-                  <span className="design-studio-stage-side-kicker">
-                    Designing
-                  </span>
-                  <span className="design-studio-stage-side-label">
-                    {activeMeta?.label || 'Location'}
-                    {garmentView === 'back'
-                      ? ' · Back'
-                      : garmentView === 'side'
-                        ? ' · Side'
-                        : ' · Front'}
-                  </span>
-                </div>
-                {displayImage?.url ? (
-                  <div className="design-studio-garment-frame">
-                    <HydrogenImage
-                      data={displayImage}
-                      sizes="(min-width: 60em) 48vw, 100vw"
-                    />
-                  </div>
-                ) : (
-                  <div className="design-studio-garment is-empty" />
-                )}
+              {artPhase === 'prep' ? (
                 <div
-                  ref={fitLayerRef}
-                  className="design-studio-fit-layer"
-                  style={{
-                    left: `${fitBox.left}%`,
-                    top: `${fitBox.top}%`,
-                    width: `${fitBox.width}%`,
-                    height: `${fitBox.height}%`,
-                  }}
+                  className={`design-studio-stage design-studio-stage--art-prep${
+                    pickMode ? ' is-picking-stage' : ''
+                  }`}
                 >
-                  {activeMeta?.transform ? (
-                    <div
-                      className={`design-studio-placement-guide design-studio-placement-guide--${
-                        activeMeta.id
-                      }${
-                        activeArt?.logoDataUrl ? ' is-filled' : ' is-empty'
-                      }`}
-                      style={{
-                        left: `${activeMeta.transform.x * 100}%`,
-                        top: `${activeMeta.transform.y * 100}%`,
-                        width: `${activeMeta.transform.scale * 100}%`,
-                        transform: `translate(-50%, -50%) rotate(${
-                          activeMeta.transform.rotation || 0
-                        }deg)`,
-                      }}
-                      aria-hidden={!activeArt?.logoDataUrl}
+                  <div className="design-studio-stage-side" aria-live="polite">
+                    <span className="design-studio-stage-side-kicker">
+                      Step 1 · Clean up
+                    </span>
+                    <span className="design-studio-stage-side-label">
+                      {activeMeta?.label || 'Artwork'}
+                    </span>
+                  </div>
+                  {activeArt?.logoDataUrl ? (
+                    <div className="design-studio-art-prep-canvas">
+                      <img
+                        ref={logoImgRef}
+                        src={activeArt.logoDataUrl}
+                        alt={`${activeMeta?.label || 'Design'} artwork`}
+                        className={`design-studio-art-prep-img${
+                          pickMode ? ' is-picking' : ''
+                        }`}
+                        draggable={false}
+                        onPointerDown={handleLogoPointerDown}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="design-studio-art-prep-empty"
+                      disabled={Boolean(busy)}
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      {!activeArt?.logoDataUrl ? (
-                        <span className="design-studio-placement-guide-copy">
-                          <span className="design-studio-placement-guide-title">
-                            Print area
-                          </span>
-                          <span className="design-studio-placement-guide-sub">
-                            {activeMeta.label}
-                          </span>
-                        </span>
-                      ) : null}
+                      <Upload size={28} aria-hidden />
+                      <span className="design-studio-art-prep-empty-title">
+                        Upload your artwork
+                      </span>
+                      <span className="design-studio-art-prep-empty-sub">
+                        Opens large so you can clean it up before placing it on
+                        the garment
+                      </span>
+                    </button>
+                  )}
+                  {pickMode && activeArt?.logoDataUrl ? (
+                    <div className="design-studio-pick-banner">
+                      Tap the artwork to select colors to remove
                     </div>
                   ) : null}
-                  {activeArt?.logoDataUrl ? (
-                    <img
-                      ref={logoImgRef}
-                      src={activeArt.logoDataUrl}
-                      alt={`${activeMeta?.label || 'Design'} artwork`}
-                      className={`design-studio-logo ${
-                        pickMode ? 'is-picking' : ''
-                      }`}
-                      draggable={false}
-                      onPointerDown={handleLogoPointerDown}
-                      style={{
-                        left: `${activeArt.transform.x * 100}%`,
-                        top: `${activeArt.transform.y * 100}%`,
-                        width: `${activeArt.transform.scale * 100}%`,
-                        transform: `translate(-50%, -50%) rotate(${activeArt.transform.rotation}deg)`,
-                      }}
-                    />
-                  ) : null}
                 </div>
-                {pickMode && activeArt?.logoDataUrl ? (
-                  <div className="design-studio-pick-banner">
-                    Click the artwork to select colors to remove
+              ) : (
+                <div
+                  ref={stageRef}
+                  className={`design-studio-stage ${dragging ? 'is-dragging' : ''}`}
+                >
+                  <div className="design-studio-stage-side" aria-live="polite">
+                    <span className="design-studio-stage-side-kicker">
+                      Step 2 · Place
+                    </span>
+                    <span className="design-studio-stage-side-label">
+                      {activeMeta?.label || 'Location'}
+                      {garmentView === 'back'
+                        ? ' · Back'
+                        : garmentView === 'side'
+                          ? ' · Side'
+                          : ' · Front'}
+                    </span>
                   </div>
-                ) : null}
-              </div>
+                  {displayImage?.url ? (
+                    <div className="design-studio-garment-frame">
+                      <HydrogenImage
+                        data={displayImage}
+                        sizes="(min-width: 60em) 48vw, 100vw"
+                      />
+                    </div>
+                  ) : (
+                    <div className="design-studio-garment is-empty" />
+                  )}
+                  <div
+                    ref={fitLayerRef}
+                    className="design-studio-fit-layer"
+                    style={{
+                      left: `${fitBox.left}%`,
+                      top: `${fitBox.top}%`,
+                      width: `${fitBox.width}%`,
+                      height: `${fitBox.height}%`,
+                    }}
+                  >
+                    {activeMeta?.transform ? (
+                      <div
+                        className={`design-studio-placement-guide design-studio-placement-guide--${
+                          activeMeta.id
+                        }${
+                          activeArt?.logoDataUrl ? ' is-filled' : ' is-empty'
+                        }`}
+                        style={{
+                          left: `${activeMeta.transform.x * 100}%`,
+                          top: `${activeMeta.transform.y * 100}%`,
+                          width: `${activeMeta.transform.scale * 100}%`,
+                          transform: `translate(-50%, -50%) rotate(${
+                            activeMeta.transform.rotation || 0
+                          }deg)`,
+                        }}
+                        aria-hidden={!activeArt?.logoDataUrl}
+                      >
+                        {!activeArt?.logoDataUrl ? (
+                          <span className="design-studio-placement-guide-copy">
+                            <span className="design-studio-placement-guide-title">
+                              Print area
+                            </span>
+                            <span className="design-studio-placement-guide-sub">
+                              {activeMeta.label}
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {activeArt?.logoDataUrl ? (
+                      <img
+                        ref={logoImgRef}
+                        src={activeArt.logoDataUrl}
+                        alt={`${activeMeta?.label || 'Design'} artwork`}
+                        className="design-studio-logo"
+                        draggable={false}
+                        onPointerDown={handleLogoPointerDown}
+                        style={{
+                          left: `${activeArt.transform.x * 100}%`,
+                          top: `${activeArt.transform.y * 100}%`,
+                          width: `${activeArt.transform.scale * 100}%`,
+                          transform: `translate(-50%, -50%) rotate(${activeArt.transform.rotation}deg)`,
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="design-studio-tools">
@@ -1120,7 +1217,7 @@ export function DesignStudioModal({
                       className={`design-studio-loc-tab ${
                         activeLocationId === id ? 'is-active' : ''
                       } ${hasArt ? 'has-art' : ''}`}
-                      onClick={() => setActiveLocationId(id)}
+                      onClick={() => selectArtworkLocation(id)}
                     >
                       {meta?.label || id}
                     </button>
@@ -1128,235 +1225,309 @@ export function DesignStudioModal({
                 })}
               </div>
 
-              <div className="design-studio-tools-block">
-                <h3 className="design-studio-tools-title">
-                  Artwork · {activeMeta?.label || 'Location'}
-                </h3>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="design-studio-file-input"
-                  disabled={Boolean(busy)}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleUpload(file);
-                    e.target.value = '';
-                  }}
-                />
-                <button
-                  type="button"
-                  className="design-studio-tool-btn design-studio-tool-btn--primary"
-                  disabled={Boolean(busy)}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload size={18} aria-hidden />
-                  {activeArt?.logoDataUrl ? 'Replace artwork' : 'Upload artwork'}
-                </button>
-              </div>
-
-              <div className="design-studio-tools-block">
-                <h3 className="design-studio-tools-title">Clean up</h3>
-                <button
-                  type="button"
-                  className={`design-studio-tool-btn ${
-                    pickMode ? 'is-active-tool' : ''
+              <div className="design-studio-art-phase-pills" aria-hidden>
+                <span
+                  className={`design-studio-art-phase-pill${
+                    artPhase === 'prep' ? ' is-active' : ''
                   }`}
-                  disabled={!activeArt?.logoDataUrl || Boolean(busy)}
-                  onClick={() => setPickMode((v) => !v)}
                 >
-                  <Pipette size={18} aria-hidden />
-                  {pickMode ? 'Done picking colors' : 'Pick colors to remove'}
-                </button>
+                  1 · Clean up
+                </span>
+                <span
+                  className={`design-studio-art-phase-pill${
+                    artPhase === 'place' ? ' is-active' : ''
+                  }`}
+                >
+                  2 · Place
+                </span>
+              </div>
 
-                {removeColors.length > 0 ? (
-                  <div className="design-studio-color-chips">
-                    {removeColors.map((c) => (
-                      <button
-                        key={c.hex}
-                        type="button"
-                        className="design-studio-color-chip"
-                        title={`Remove ${c.hex} (click to drop)`}
-                        style={{background: c.hex}}
-                        onClick={() =>
-                          setRemoveColors((prev) =>
-                            prev.filter((x) => x.hex !== c.hex),
-                          )
-                        }
-                      >
-                        <X size={12} strokeWidth={2.5} />
-                      </button>
-                    ))}
+              {artPhase === 'prep' ? (
+                <>
+                  <div className="design-studio-tools-block">
+                    <h3 className="design-studio-tools-title">
+                      Artwork · {activeMeta?.label || 'Location'}
+                    </h3>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      className="design-studio-file-input"
+                      disabled={Boolean(busy)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="design-studio-tool-btn design-studio-tool-btn--primary"
+                      disabled={Boolean(busy)}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload size={18} aria-hidden />
+                      {activeArt?.logoDataUrl
+                        ? 'Replace artwork'
+                        : 'Upload artwork'}
+                    </button>
+                    <p className="design-studio-hint">
+                      Clean up your logo large, then place it on the product.
+                    </p>
                   </div>
-                ) : null}
 
-                <div className="design-studio-quick-colors">
-                  <button
-                    type="button"
-                    className="design-studio-quick-color"
-                    disabled={!activeArt?.logoDataUrl || Boolean(busy)}
-                    onClick={() =>
-                      setRemoveColors((prev) =>
-                        upsertColor(prev, {r: 255, g: 255, b: 255, hex: '#FFFFFF'}),
-                      )
-                    }
-                  >
-                    <span
-                      className="design-studio-quick-swatch"
-                      style={{background: '#fff'}}
+                  {activeArt?.logoDataUrl ? (
+                    <div className="design-studio-tools-block">
+                      <h3 className="design-studio-tools-title">Clean up</h3>
+                      <button
+                        type="button"
+                        className={`design-studio-tool-btn ${
+                          pickMode ? 'is-active-tool' : ''
+                        }`}
+                        disabled={Boolean(busy)}
+                        onClick={() => setPickMode((v) => !v)}
+                      >
+                        <Pipette size={18} aria-hidden />
+                        {pickMode
+                          ? 'Done picking colors'
+                          : 'Pick colors to remove'}
+                      </button>
+
+                      {removeColors.length > 0 ? (
+                        <div className="design-studio-color-chips">
+                          {removeColors.map((c) => (
+                            <button
+                              key={c.hex}
+                              type="button"
+                              className="design-studio-color-chip"
+                              title={`Remove ${c.hex} (click to drop)`}
+                              style={{background: c.hex}}
+                              onClick={() =>
+                                setRemoveColors((prev) =>
+                                  prev.filter((x) => x.hex !== c.hex),
+                                )
+                              }
+                            >
+                              <X size={12} strokeWidth={2.5} />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="design-studio-quick-colors">
+                        <button
+                          type="button"
+                          className="design-studio-quick-color"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            setRemoveColors((prev) =>
+                              upsertColor(prev, {
+                                r: 255,
+                                g: 255,
+                                b: 255,
+                                hex: '#FFFFFF',
+                              }),
+                            )
+                          }
+                        >
+                          <span
+                            className="design-studio-quick-swatch"
+                            style={{background: '#fff'}}
+                          />
+                          White
+                        </button>
+                        <button
+                          type="button"
+                          className="design-studio-quick-color"
+                          disabled={Boolean(busy)}
+                          onClick={() =>
+                            setRemoveColors((prev) =>
+                              upsertColor(prev, {
+                                r: 0,
+                                g: 0,
+                                b: 0,
+                                hex: '#000000',
+                              }),
+                            )
+                          }
+                        >
+                          <span
+                            className="design-studio-quick-swatch"
+                            style={{background: '#111'}}
+                          />
+                          Black
+                        </button>
+                      </div>
+
+                      <div className="design-studio-history-row">
+                        <button
+                          type="button"
+                          className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                          disabled={
+                            !artHistory[activeLocationId || '']?.past?.length ||
+                            Boolean(busy)
+                          }
+                          onClick={handleUndoArt}
+                          title="Undo last clean-up step"
+                        >
+                          <Undo2 size={18} aria-hidden />
+                          Undo
+                        </button>
+                        <button
+                          type="button"
+                          className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                          disabled={
+                            !artHistory[activeLocationId || '']?.future
+                              ?.length || Boolean(busy)
+                          }
+                          onClick={handleRedoArt}
+                          title="Redo clean-up step"
+                        >
+                          <Redo2 size={18} aria-hidden />
+                          Redo
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="design-studio-tool-btn design-studio-tool-btn--primary"
+                        disabled={!removeColors.length || Boolean(busy)}
+                        onClick={handleApplyColorRemove}
+                      >
+                        {busy === 'color-remove' ? (
+                          <Loader2
+                            size={18}
+                            className="is-spin"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Eraser size={18} aria-hidden />
+                        )}
+                        Remove selected colors
+                      </button>
+
+                      <div className="design-studio-tools-grid">
+                        <button
+                          type="button"
+                          className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                          disabled={
+                            !activeArt?.originalDataUrl ||
+                            activeArt.logoDataUrl ===
+                              activeArt.originalDataUrl ||
+                            Boolean(busy)
+                          }
+                          onClick={handleRestoreOriginal}
+                        >
+                          <RotateCcw size={18} aria-hidden />
+                          Restore original
+                        </button>
+
+                        <button
+                          type="button"
+                          className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                          disabled={Boolean(busy)}
+                          onClick={handleRemoveBg}
+                        >
+                          {busy === 'remove-bg' ? (
+                            <Loader2
+                              size={18}
+                              className="is-spin"
+                              aria-hidden
+                            />
+                          ) : (
+                            <Wand2 size={18} aria-hidden />
+                          )}
+                          Auto clean
+                        </button>
+                      </div>
+                      <p className="design-studio-hint">
+                        Tip: tap background colors (often white), then Remove.
+                        Use Undo if Auto clean erases too much.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className="design-studio-tools-block">
+                    <h3 className="design-studio-tools-title">
+                      Placement · {activeMeta?.label || 'Location'}
+                    </h3>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      className="design-studio-file-input"
+                      disabled={Boolean(busy)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(file);
+                        e.target.value = '';
+                      }}
                     />
-                    White
-                  </button>
-                  <button
-                    type="button"
-                    className="design-studio-quick-color"
-                    disabled={!activeArt?.logoDataUrl || Boolean(busy)}
-                    onClick={() =>
-                      setRemoveColors((prev) =>
-                        upsertColor(prev, {r: 0, g: 0, b: 0, hex: '#000000'}),
-                      )
-                    }
-                  >
-                    <span
-                      className="design-studio-quick-swatch"
-                      style={{background: '#111'}}
-                    />
-                    Black
-                  </button>
-                </div>
-
-                <div className="design-studio-history-row">
-                  <button
-                    type="button"
-                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                    disabled={
-                      !artHistory[activeLocationId || '']?.past?.length ||
-                      Boolean(busy)
-                    }
-                    onClick={handleUndoArt}
-                    title="Undo last clean-up step"
-                  >
-                    <Undo2 size={18} aria-hidden />
-                    Undo
-                  </button>
-                  <button
-                    type="button"
-                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                    disabled={
-                      !artHistory[activeLocationId || '']?.future?.length ||
-                      Boolean(busy)
-                    }
-                    onClick={handleRedoArt}
-                    title="Redo clean-up step"
-                  >
-                    <Redo2 size={18} aria-hidden />
-                    Redo
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  className="design-studio-tool-btn design-studio-tool-btn--primary"
-                  disabled={
-                    !activeArt?.logoDataUrl ||
-                    !removeColors.length ||
-                    Boolean(busy)
-                  }
-                  onClick={handleApplyColorRemove}
-                >
-                  {busy === 'color-remove' ? (
-                    <Loader2 size={18} className="is-spin" aria-hidden />
-                  ) : (
-                    <Eraser size={18} aria-hidden />
-                  )}
-                  Remove selected colors
-                </button>
-
-                <div className="design-studio-tools-grid">
-                  <button
-                    type="button"
-                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                    disabled={
-                      !activeArt?.originalDataUrl ||
-                      activeArt.logoDataUrl === activeArt.originalDataUrl ||
-                      Boolean(busy)
-                    }
-                    onClick={handleRestoreOriginal}
-                  >
-                    <RotateCcw size={18} aria-hidden />
-                    Restore original
-                  </button>
-
-                  <button
-                    type="button"
-                    className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                    disabled={!activeArt?.logoDataUrl || Boolean(busy)}
-                    onClick={handleRemoveBg}
-                  >
-                    {busy === 'remove-bg' ? (
-                      <Loader2 size={18} className="is-spin" aria-hidden />
-                    ) : (
+                    <button
+                      type="button"
+                      className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        setPickMode(false);
+                        setArtPhase('prep');
+                      }}
+                    >
                       <Wand2 size={18} aria-hidden />
-                    )}
-                    Auto clean
-                  </button>
-                </div>
-                <p className="design-studio-hint">
-                  Tip: pick background colors to remove (often white), then use
-                  Undo / Redo to step through changes. Auto clean can over-erase
-                  detailed logos.
-                </p>
-              </div>
-
-              <div className="design-studio-tools-block">
-                <h3 className="design-studio-tools-title">Placement</h3>
-                <label className="design-studio-slider-label">
-                  Size
-                  <input
-                    type="range"
-                    min={0.08}
-                    max={0.7}
-                    step={0.01}
-                    value={activeArt?.transform.scale ?? 0.36}
-                    disabled={!activeArt}
-                    onChange={(e) =>
-                      updateActiveTransform({scale: Number(e.target.value)})
-                    }
-                  />
-                </label>
-                <label className="design-studio-slider-label">
-                  Rotate
-                  <input
-                    type="range"
-                    min={-30}
-                    max={30}
-                    step={1}
-                    value={activeArt?.transform.rotation ?? 0}
-                    disabled={!activeArt}
-                    onChange={(e) =>
-                      updateActiveTransform({
-                        rotation: Number(e.target.value),
-                      })
-                    }
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="design-studio-tool-btn design-studio-tool-btn--ghost"
-                  disabled={!activeArt}
-                  onClick={() => {
-                    const preset =
-                      activeMeta?.transform || DEFAULT_DESIGN_TRANSFORM;
-                    updateActiveTransform({...preset});
-                  }}
-                >
-                  <RotateCcw size={18} aria-hidden />
-                  Reset placement
-                </button>
-                <p className="design-studio-hint">
-                  Drag artwork on the garment to fine-tune position.
-                </p>
-              </div>
+                      Edit / clean artwork
+                    </button>
+                    <label className="design-studio-slider-label">
+                      Size
+                      <input
+                        type="range"
+                        min={0.08}
+                        max={0.7}
+                        step={0.01}
+                        value={activeArt?.transform.scale ?? 0.36}
+                        disabled={!activeArt}
+                        onChange={(e) =>
+                          updateActiveTransform({
+                            scale: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="design-studio-slider-label">
+                      Rotate
+                      <input
+                        type="range"
+                        min={-30}
+                        max={30}
+                        step={1}
+                        value={activeArt?.transform.rotation ?? 0}
+                        disabled={!activeArt}
+                        onChange={(e) =>
+                          updateActiveTransform({
+                            rotation: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="design-studio-tool-btn design-studio-tool-btn--ghost"
+                      disabled={!activeArt}
+                      onClick={() => {
+                        const preset =
+                          activeMeta?.transform || DEFAULT_DESIGN_TRANSFORM;
+                        updateActiveTransform({...preset});
+                      }}
+                    >
+                      <RotateCcw size={18} aria-hidden />
+                      Reset placement
+                    </button>
+                    <p className="design-studio-hint">
+                      Drag artwork on the garment to fine-tune position.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ) : null}
@@ -1457,6 +1628,11 @@ export function DesignStudioModal({
           >
             {step === 'color' ? (
               'Cancel'
+            ) : step === 'artwork' && artPhase === 'place' ? (
+              <>
+                <ChevronLeft size={18} aria-hidden />
+                Edit art
+              </>
             ) : (
               <>
                 <ChevronLeft size={18} aria-hidden />
@@ -1480,6 +1656,11 @@ export function DesignStudioModal({
               <>
                 Save design
                 <Check size={18} className="button-icon" aria-hidden />
+              </>
+            ) : step === 'artwork' && artPhase === 'prep' ? (
+              <>
+                Place on product
+                <ChevronRight size={18} className="button-icon" aria-hidden />
               </>
             ) : (
               <>

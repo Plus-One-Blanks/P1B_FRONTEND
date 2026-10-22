@@ -17,13 +17,64 @@ import {
   isColorLikeOptionName,
   nonSizeSelectedOptions,
 } from '~/lib/cartEditSizes';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Search, X } from 'lucide-react';
 import { Link, useFetcher, useLocation, useNavigate } from 'react-router';
 import { CartAddColorModal } from '~/components/CartAddColorModal';
 import { CartEditSizesModal } from '~/components/CartEditSizesModal';
-import { retailLineTotalForLine } from '~/lib/cartRetailPricing';
 import { readDesignFromLineAttributes } from '~/lib/designOrderAttributes';
+import {
+  formatGangSheetSizeLabel,
+  gangSheetStudioEditUrl,
+  readGangSheetFromLineAttributes,
+} from '~/lib/dtfGangSheetOrderAttributes';
+import { readFreeSampleFromLineAttributes } from '~/lib/freeSampleOrderAttributes';
+import { DTF_GANG_SHEET_SIZES } from '~/lib/dtfSheetConstants';
 import { useAside } from './Aside';
+
+/**
+ * Free sample line: sample item / placement / size from cart attributes.
+ * @param {{ attributes?: Array<{ key?: string | null; value?: string | null }> | null; compact?: boolean }}
+ */
+function CartLineFreeSampleBadge({ attributes, compact = false }) {
+  const sample = readFreeSampleFromLineAttributes(attributes);
+  if (!sample) return null;
+
+  return (
+    <div
+      className={
+        compact
+          ? 'cart-line-free-sample cart-line-free-sample--compact'
+          : 'cart-line-free-sample'
+      }
+    >
+      {sample.artworkUrl ? (
+        <img
+          src={sample.artworkUrl}
+          alt=""
+          className="cart-line-free-sample-thumb"
+          loading="lazy"
+        />
+      ) : null}
+      <div className="cart-line-free-sample-copy">
+        {sample.sampleItem ? (
+          <span className="cart-line-attribute">
+            Sample item: {sample.sampleItem}
+          </span>
+        ) : null}
+        {sample.placement ? (
+          <span className="cart-line-attribute">
+            Sample placement: {sample.placement}
+          </span>
+        ) : null}
+        {sample.printSize ? (
+          <span className="cart-line-attribute">
+            Sample print size: {sample.printSize}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Decorated line: mockup thumb + print summary from Shopify line attributes.
@@ -67,6 +118,163 @@ function CartLineDesignBadge({ attributes, compact = false }) {
   );
 }
 
+/**
+ * DTF gang sheet line: sheet preview + size / design name + Edit.
+ * @param {{
+ *   attributes?: Array<{ key?: string | null; value?: string | null }> | null;
+ *   lineId?: string | null;
+ *   compact?: boolean;
+ *   onEdit?: () => void;
+ * }}
+ */
+function CartLineGangSheetBadge({
+  attributes,
+  lineId = null,
+  compact = false,
+  onEdit,
+}) {
+  const sheet = readGangSheetFromLineAttributes(attributes);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!previewOpen) return undefined;
+    /**
+     * @param {KeyboardEvent} e
+     */
+    function onKey(e) {
+      if (e.key === 'Escape') setPreviewOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewOpen]);
+
+  if (!sheet) return null;
+
+  const sizeMeta =
+    DTF_GANG_SHEET_SIZES.find((s) => s.id === sheet.sheetSize) || null;
+  const sizeLabel = formatGangSheetSizeLabel(sheet.sheetSize, sizeMeta);
+  const editTo = gangSheetStudioEditUrl({
+    gangSheetId: sheet.id,
+    cartLineId: lineId,
+    sheetSize: sheet.sheetSize,
+    designName: sheet.designName,
+  });
+  const canPreview = Boolean(sheet.previewUrl);
+
+  const previewModal =
+    previewOpen && canPreview && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="cart-gang-preview-root"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setPreviewOpen(false);
+            }}
+          >
+            <div className="cart-gang-preview-modal">
+              <header className="cart-gang-preview-header">
+                <div>
+                  <h2 id={titleId}>
+                    {sheet.designName || 'Gang sheet preview'}
+                  </h2>
+                  <p>{sizeLabel} · DTF</p>
+                </div>
+                <button
+                  type="button"
+                  className="cart-gang-preview-close"
+                  aria-label="Close preview"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <X size={18} strokeWidth={2.25} />
+                </button>
+              </header>
+              <div className="cart-gang-preview-stage">
+                <img src={sheet.previewUrl || ''} alt="" />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <div
+        className={
+          compact
+            ? 'cart-line-gang cart-line-gang--compact'
+            : 'cart-line-gang'
+        }
+      >
+        <div className="cart-line-gang-thumb-wrap">
+          {sheet.previewUrl ? (
+            <img
+              src={sheet.previewUrl}
+              alt=""
+              className="cart-line-gang-thumb"
+              loading="lazy"
+            />
+          ) : (
+            <span className="cart-line-gang-thumb cart-line-gang-thumb--empty" />
+          )}
+          {canPreview ? (
+            <button
+              type="button"
+              className="cart-line-gang-zoom"
+              aria-label="View gang sheet preview"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setPreviewOpen(true);
+              }}
+            >
+              <Search size={12} strokeWidth={2.5} />
+            </button>
+          ) : (
+            <span className="cart-line-gang-zoom" aria-hidden>
+              <Search size={12} strokeWidth={2.5} />
+            </span>
+          )}
+        </div>
+        <div className="cart-line-gang-copy">
+          <span className="cart-line-gang-title">DTF Gang Sheet Builder</span>
+          <div className="cart-line-gang-row">
+            <span>
+              Size: <strong>{sizeLabel}</strong>
+            </span>
+            <Link
+              to={editTo}
+              className="cart-line-gang-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit?.();
+              }}
+            >
+              Edit
+            </Link>
+          </div>
+          <div className="cart-line-gang-row">
+            <span>
+              Transfer Type: <strong>DTF</strong>
+            </span>
+          </div>
+          {sheet.designName ? (
+            <div className="cart-line-gang-row">
+              <span>
+                Design Name: <strong>{sheet.designName}</strong>
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {previewModal}
+    </>
+  );
+}
+
 /** Trailing icon for cart line footer text actions (bounce on hover — see `app.css`). */
 function CartLinePageFooterActionIcon() {
   return (
@@ -80,42 +288,15 @@ function CartLinePageFooterActionIcon() {
  * @param {CartLine} line
  * @param {CartApiQueryFragment | null | undefined} cart
  */
-function computeCartLineDisplayPricing(line, cart) {
-  const { merchandise, quantity, cost } = line;
+function computeCartLineDisplayPricing(line) {
+  const { cost } = line;
   const totalAmount = parseFloat(cost?.totalAmount?.amount || 0);
   const unitPrice = parseFloat(cost?.amountPerQuantity?.amount || 0);
-  const originalUnitPrice = parseFloat(merchandise?.price?.amount || 0);
-  const retailLineTotal = retailLineTotalForLine(line);
-
-  const cartSubtotal = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
-  const cartTotal = parseFloat(cart?.cost?.totalAmount?.amount || 0);
-  const cartSavings = cartSubtotal - cartTotal;
-  const discountPercentage =
-    cartSubtotal > 0 ? (cartSavings / cartSubtotal) * 100 : 0;
-  const computedDiscountedUnit =
-    discountPercentage > 0 && originalUnitPrice > 0
-      ? originalUnitPrice * (1 - discountPercentage / 100)
-      : unitPrice;
-  const displayUnitPrice =
-    discountPercentage > 0 && originalUnitPrice > 0
-      ? Math.round(computedDiscountedUnit * 100) / 100
-      : unitPrice > 0
-        ? unitPrice
-        : computedDiscountedUnit;
-
-  const displayLineTotal =
-    discountPercentage > 0 && originalUnitPrice > 0
-      ? Math.round(displayUnitPrice * quantity * 100) / 100
-      : totalAmount;
-  const hasDiscount =
-    retailLineTotal > displayLineTotal + 0.005 && displayLineTotal >= 0;
+  const originalUnitPrice = parseFloat(line?.merchandise?.price?.amount || 0);
 
   return {
-    displayUnitPrice,
-    displayLineTotal,
-    hasDiscount,
-    originalUnitPrice,
-    retailLineTotal,
+    displayUnitPrice: unitPrice > 0 ? unitPrice : originalUnitPrice,
+    displayLineTotal: totalAmount,
   };
 }
 
@@ -167,16 +348,13 @@ export function CartLineItem({
   const cartSubtotal = parseFloat(cart?.cost?.subtotalAmount?.amount || 0);
   const cartTotal = parseFloat(cart?.cost?.totalAmount?.amount || 0);
   const cartSavings = cartSubtotal - cartTotal;
+  // Edit-size / add-color modals still accept this; volume breaks are off so keep 0
   const discountPercentage =
-    cartSubtotal > 0 ? (cartSavings / cartSubtotal) * 100 : 0;
+    cartSubtotal > 0 ? Math.max(0, (cartSavings / cartSubtotal) * 100) : 0;
 
   const asidePricing =
-    layout !== 'page'
-      ? computeCartLineDisplayPricing(primaryLine, cart)
-      : null;
+    layout !== 'page' ? computeCartLineDisplayPricing(primaryLine) : null;
   const displayLineTotal = asidePricing?.displayLineTotal ?? 0;
-  const hasDiscount = asidePricing?.hasDiscount ?? false;
-  const retailLineTotal = asidePricing?.retailLineTotal ?? 0;
 
   // Get product title and remove everything after the last "-"
   const fullTitle = product.title;
@@ -228,6 +406,18 @@ export function CartLineItem({
 
   const canBulkEditSizes = Boolean(sizeOption);
 
+  const gangSheet = useMemo(
+    () => readGangSheetFromLineAttributes(primaryLine.attributes),
+    [primaryLine.attributes],
+  );
+  const isGangSheet = Boolean(gangSheet);
+  const freeSample = useMemo(
+    () => readFreeSampleFromLineAttributes(primaryLine.attributes),
+    [primaryLine.attributes],
+  );
+  const isFreeSample = Boolean(freeSample);
+  const isFreePrice = displayLineTotal <= 0.009;
+
   const otherOptions = selectedOptions.filter((opt) => {
     const name = opt.name.toLowerCase().trim();
     const matchesColorRow =
@@ -237,7 +427,8 @@ export function CartLineItem({
     return (
       !matchesColorRow &&
       !isColorLikeOptionName(opt.name) &&
-      name !== 'size'
+      name !== 'size' &&
+      !(isFreeSample && name === 'offer')
     );
   });
 
@@ -284,6 +475,16 @@ export function CartLineItem({
             </span>
           </div>
           <div className="cart-line-page-header">
+            {isGangSheet ? (
+              <div className="cart-line-page-info cart-line-page-info--gang">
+                <CartLineGangSheetBadge
+                  attributes={primaryLine.attributes}
+                  lineId={primaryLine.id}
+                  onEdit={() => close()}
+                />
+              </div>
+            ) : (
+              <>
             {image ? (
               <Link
                 className="cart-line-page-media cart-line-page-media--header-thumb"
@@ -339,13 +540,17 @@ export function CartLineItem({
                 ))}
               </div>
               <CartLineDesignBadge attributes={primaryLine.attributes} />
+              <CartLineFreeSampleBadge attributes={primaryLine.attributes} />
             </div>
+              </>
+            )}
           </div>
 
           {lines.map((rowLine) => (
             <CartPageLineSizeRow key={rowLine.id} line={rowLine} cart={cart} />
           ))}
 
+          {!isGangSheet && !isFreeSample ? (
           <div className="cart-line-page-footer">
             {canBulkEditSizes ? (
               <button
@@ -390,6 +595,7 @@ export function CartLineItem({
               </Link>
             )}
           </div>
+          ) : null}
         </div>
 
         {canBulkEditSizes ? (
@@ -481,16 +687,23 @@ export function CartLineItem({
           attributes={primaryLine.attributes}
           compact
         />
+        <CartLineGangSheetBadge
+          attributes={primaryLine.attributes}
+          lineId={primaryLine.id}
+          compact
+          onEdit={() => close()}
+        />
+        <CartLineFreeSampleBadge
+          attributes={primaryLine.attributes}
+          compact
+        />
         <div className="cart-line-controls" onClick={(e) => e.stopPropagation()}>
           <CartLineQuantity line={primaryLine} />
           <div className="cart-line-pricing">
-            {hasDiscount ? (
-              <span className="cart-line-price-original">
-                ${retailLineTotal.toFixed(2)}
-              </span>
-            ) : null}
             <span className="cart-line-price-total">
-              ${displayLineTotal.toFixed(2)}
+              {isFreeSample && isFreePrice
+                ? 'FREE'
+                : `$${displayLineTotal.toFixed(2)}`}
             </span>
           </div>
         </div>
@@ -788,12 +1001,22 @@ function CartPageLineSizeRow({ line, cart }) {
   const sizeOption = selectedOptions.find(
     (opt) => opt.name.toLowerCase().trim() === 'size',
   );
-  const { displayLineTotal, hasDiscount, retailLineTotal } =
-    computeCartLineDisplayPricing(line, cart);
+  const offerOption = selectedOptions.find(
+    (opt) => opt.name.toLowerCase().trim() === 'offer',
+  );
+  const { displayLineTotal } = computeCartLineDisplayPricing(line);
+  const freeSample = readFreeSampleFromLineAttributes(line.attributes);
+  const label =
+    sizeOption?.value ??
+    (freeSample?.sampleItem
+      ? freeSample.sampleItem
+      : offerOption?.value) ??
+    '—';
+  const isFree = Boolean(freeSample) && displayLineTotal <= 0.009;
 
   return (
     <div className="cart-line-page-size-row">
-      <span className="cart-line-page-size-label">{sizeOption?.value ?? '—'}</span>
+      <span className="cart-line-page-size-label">{label}</span>
       <div className="cart-line-page-size-row-rest">
         <div
           className="cart-line-page-size-row-controls"
@@ -807,20 +1030,9 @@ function CartPageLineSizeRow({ line, cart }) {
           <CartLineQuantity line={line} variant="page" />
         </div>
         <div className="cart-line-page-size-row-price">
-          {hasDiscount ? (
-            <>
-              <span className="cart-line-page-strike cart-line-page-strike--size-row">
-                ${retailLineTotal.toFixed(2)}
-              </span>
-              <span className="cart-line-page-line-total cart-line-page-line-total--size-row">
-                ${displayLineTotal.toFixed(2)}
-              </span>
-            </>
-          ) : (
-            <span className="cart-line-page-line-total cart-line-page-line-total--size-row">
-              ${displayLineTotal.toFixed(2)}
-            </span>
-          )}
+          <span className="cart-line-page-line-total cart-line-page-line-total--size-row">
+            {isFree ? 'FREE' : `$${displayLineTotal.toFixed(2)}`}
+          </span>
         </div>
       </div>
     </div>

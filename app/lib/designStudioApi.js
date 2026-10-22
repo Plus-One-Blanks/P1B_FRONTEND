@@ -687,6 +687,108 @@ export async function removeColorsFromImage(dataUrl, colors, tolerance = 36) {
 }
 
 /**
+ * Remove only the outer/page background — pixels similar to the corners that
+ * are connected to the image edge. Interior fills (white inside a logo) stay.
+ * Prefer this over AI cutout for screenshots / line art on solid backgrounds.
+ *
+ * @param {string} dataUrl
+ * @param {{ tolerance?: number }} [opts]
+ * @returns {Promise<string>} PNG data URL
+ */
+export async function removeEdgeBackground(dataUrl, opts = {}) {
+  const tolerance = Math.max(8, Number(opts.tolerance) || 36);
+  const {canvas, ctx, width, height} = await drawDataUrlToCanvas(dataUrl);
+  const image = ctx.getImageData(0, 0, width, height);
+  const data = image.data;
+  const n = width * height;
+
+  // Sample corners (+ near-corner) to pick the page color
+  const samplePts = [
+    [2, 2],
+    [width - 3, 2],
+    [2, height - 3],
+    [width - 3, height - 3],
+    [Math.floor(width / 2), 2],
+    [2, Math.floor(height / 2)],
+  ];
+  /** @type {Array<{ r: number; g: number; b: number }>} */
+  const samples = [];
+  for (const [sx, sy] of samplePts) {
+    const x = clampInt(sx, 0, width - 1);
+    const y = clampInt(sy, 0, height - 1);
+    const i = (y * width + x) * 4;
+    if (data[i + 3] < 8) continue;
+    samples.push({r: data[i], g: data[i + 1], b: data[i + 2]});
+  }
+  if (!samples.length) return dataUrl;
+
+  // Average sample as background target
+  const bg = {
+    r: Math.round(samples.reduce((s, c) => s + c.r, 0) / samples.length),
+    g: Math.round(samples.reduce((s, c) => s + c.g, 0) / samples.length),
+    b: Math.round(samples.reduce((s, c) => s + c.b, 0) / samples.length),
+  };
+
+  const matchesBg = (idx) => {
+    const i = idx * 4;
+    if (data[i + 3] < 8) return true;
+    return colorDistance(data[i], data[i + 1], data[i + 2], bg.r, bg.g, bg.b) <=
+      tolerance;
+  };
+
+  const visited = new Uint8Array(n);
+  /** @type {number[]} */
+  const queue = [];
+
+  const enqueueEdge = (x, y) => {
+    const idx = y * width + x;
+    if (visited[idx]) return;
+    if (!matchesBg(idx)) return;
+    visited[idx] = 1;
+    queue.push(idx);
+  };
+
+  for (let x = 0; x < width; x++) {
+    enqueueEdge(x, 0);
+    enqueueEdge(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    enqueueEdge(0, y);
+    enqueueEdge(width - 1, y);
+  }
+
+  while (queue.length) {
+    const idx = queue.pop();
+    const x = idx % width;
+    const y = (idx / width) | 0;
+    const neighbors = [
+      idx - 1,
+      idx + 1,
+      idx - width,
+      idx + width,
+    ];
+    for (const nIdx of neighbors) {
+      if (nIdx < 0 || nIdx >= n) continue;
+      if (visited[nIdx]) continue;
+      const nx = nIdx % width;
+      const ny = (nIdx / width) | 0;
+      // prevent wrap on left/right
+      if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
+      if (!matchesBg(nIdx)) continue;
+      visited[nIdx] = 1;
+      queue.push(nIdx);
+    }
+  }
+
+  for (let idx = 0; idx < n; idx++) {
+    if (visited[idx]) data[idx * 4 + 3] = 0;
+  }
+
+  ctx.putImageData(image, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+/**
  * @param {string} dataUrl
  */
 async function drawDataUrlToCanvas(dataUrl) {
